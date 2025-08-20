@@ -35,14 +35,16 @@ jobs:
     - name: Setup Container
       run: chown -R 1000:1000 `pwd`
     - name: Code Quality Verification Checks
-      run: su `id -un 1000` -c "./gradlew check -x test"
+      run: su `id -un 1000` -c "./gradlew precommit"
     - name: Build
       run: su `id -un 1000` -c "./gradlew assemble"
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: build-artifacts
-        path: build/libs/
+        name: build-artifacts-java-${{ matrix.java }}
+        path: 
+          build/distributions/
+        if-no-files-found: warn
 
   tests:
     runs-on: ubuntu-latest

@@ -120,7 +120,7 @@ integTest {
 }
 
 javadoc {
-   options.addStringOption('Xdoclint:all', '-quiet')
+  options.addStringOption('Xdoclint:all', '-Xwerror')
 }
 
 
@@ -148,12 +148,13 @@ jacocoTestReport {
     }
 }
 test.finalizedBy(project.tasks.jacocoTestReport)
+test.finalizedBy(project.tasks.jacocoTestCoverageVerification)
 
 jacocoTestCoverageVerification {
     violationRules {
         rule {
             limit {
-                minimum = 0.75
+                minimum = 0.85
             }
         }
     }
