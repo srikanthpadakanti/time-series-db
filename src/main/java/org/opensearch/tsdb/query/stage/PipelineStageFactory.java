@@ -17,6 +17,7 @@ import org.opensearch.tsdb.lang.m3.stage.ScaleStage;
 import org.opensearch.tsdb.lang.m3.stage.SortStage;
 import org.opensearch.tsdb.lang.m3.stage.SumStage;
 import org.opensearch.tsdb.lang.m3.stage.ValueFilterStage;
+import org.opensearch.tsdb.lang.m3.stage.TimeshiftStage;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -34,9 +35,13 @@ import java.util.function.Function;
  *
  * <h2>Supported Stage Types:</h2>
  * <ul>
- *   <li><strong>Unary Stages:</strong> alias, avg, max, min, scale, sort, sum</li>
+ *   <li><strong>Unary Stages:</strong> alias, avg, max, min, scale, sort, sum, timeshift</li>
  *   <li><strong>Unary Stages:</strong> scale, valueFilter</li>
  * </ul>
+     * <h2>Supported Stage Types:</h2>
+     * <ul>
+     *   <li><strong>Unary Stages:</strong> scale, timeshift</li>
+     * </ul>
  *
  * <h2>Usage Examples:</h2>
  * <pre>{@code
@@ -79,14 +84,15 @@ public class PipelineStageFactory {
             // this would use classpath scanning to find all annotated classes.
             // Registering in alphabetical order for consistency
             registerStage(AliasStage.class);
+            registerStage(AsPercentStage.class);
             registerStage(AvgStage.class);
             registerStage(MaxStage.class);
             registerStage(MinStage.class);
             registerStage(ScaleStage.class);
             registerStage(SortStage.class);
             registerStage(SumStage.class);
+            registerStage(TimeshiftStage.class);
             registerStage(ValueFilterStage.class);
-            registerStage(AsPercentStage.class);
         } catch (Exception e) {
             throw new RuntimeException("Failed to auto-register pipeline stages", e);
         }
