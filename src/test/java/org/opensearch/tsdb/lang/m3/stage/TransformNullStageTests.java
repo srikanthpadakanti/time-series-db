@@ -1,0 +1,275 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+package org.opensearch.tsdb.lang.m3.stage;
+
+import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.test.AbstractWireSerializingTestCase;
+import org.opensearch.tsdb.core.model.ByteLabels;
+import org.opensearch.tsdb.core.model.FloatSample;
+import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.query.aggregator.TimeSeries;
+import org.opensearch.tsdb.query.stage.PipelineStage;
+import org.opensearch.tsdb.query.stage.PipelineStageFactory;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
+import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
+import static org.opensearch.tsdb.TestUtils.assertSamplesEqual;
+
+public class TransformNullStageTests extends AbstractWireSerializingTestCase<TransformNullStage> {
+
+    /**
+     * Test case 1: All null values (missing data points).
+     * No samples are provided, so all values should be replaced with the fill value.
+     */
+    public void testAllNullValues() {
+        TransformNullStage stage = new TransformNullStage(10.0);
+        // Empty samples list represents all null/missing values
+        List<Sample> samples = List.of();
+        ByteLabels labels = ByteLabels.fromStrings("name", "metric1");
+        TimeSeries timeSeries = new TimeSeries(samples, labels, 10L, 30L, 10L, null);
+
+        List<TimeSeries> result = stage.process(List.of(timeSeries));
+
+        assertEquals(1, result.size());
+        TimeSeries resultSeries = result.get(0);
+        assertEquals(3, resultSeries.getSamples().size());
+
+        // All values should be filled with 10.0
+        List<Sample> expectedSamples = List.of(new FloatSample(10L, 10.0), new FloatSample(20L, 10.0), new FloatSample(30L, 10.0));
+        assertSamplesEqual("All null values test", expectedSamples, resultSeries.getSamples());
+    }
+
+    /**
+     * Test case 2: Mixed values.
+     * Some samples are valid, some are missing. Missing timestamps should be filled.
+     */
+    public void testMixedValues() {
+        TransformNullStage stage = new TransformNullStage(5.0);
+        // Create sparse samples - skip some timestamps to represent null values
+        List<Sample> samples = List.of(
+            new FloatSample(10L, 1.0),      // valid
+            // 20L is missing (null) -> should become 5.0
+            new FloatSample(30L, 3.0)       // valid
+            // 40L and 50L are missing (null) -> should become 5.0
+        );
+        ByteLabels labels = ByteLabels.fromStrings("name", "metric2");
+        TimeSeries timeSeries = new TimeSeries(samples, labels, 10L, 50L, 10L, null);
+
+        List<TimeSeries> result = stage.process(List.of(timeSeries));
+
+        assertEquals(1, result.size());
+        TimeSeries resultSeries = result.get(0);
+
+        // Should have 5 samples (10, 20, 30, 40, 50)
+        assertEquals(5, resultSeries.getSamples().size());
+
+        List<Sample> expectedSamples = List.of(
+            new FloatSample(10L, 1.0),  // original
+            new FloatSample(20L, 5.0),  // filled
+            new FloatSample(30L, 3.0),  // original
+            new FloatSample(40L, 5.0),  // filled
+            new FloatSample(50L, 5.0)   // filled
+        );
+        assertSamplesEqual("Mixed values test", expectedSamples, resultSeries.getSamples());
+    }
+
+    /**
+     * Test case 3: Default value (0) with mixed valid and missing data.
+     * Using the no-arg constructor should fill with 0.0 by default.
+     * Different from test case 1 which has all missing data.
+     */
+    public void testDefaultFillValue() {
+        TransformNullStage stage = new TransformNullStage(); // defaults to 0.0
+        // Create a diverse test with one valid value and some missing timestamps
+        List<Sample> samples = List.of(new FloatSample(20L, 15.0));
+        ByteLabels labels = ByteLabels.fromStrings("name", "metric3");
+        TimeSeries timeSeries = new TimeSeries(samples, labels, 10L, 40L, 10L, null);
+
+        List<TimeSeries> result = stage.process(List.of(timeSeries));
+
+        assertEquals(1, result.size());
+        TimeSeries resultSeries = result.get(0);
+        assertEquals(4, resultSeries.getSamples().size()); // 10, 20, 30, 40
+
+        // Expected: [0.0 at 10L, 15.0 at 20L, 0.0 at 30L, 0.0 at 40L]
+        List<Sample> expectedSamples = List.of(
+            new FloatSample(10L, 0.0),   // filled
+            new FloatSample(20L, 15.0),  // original
+            new FloatSample(30L, 0.0),   // filled
+            new FloatSample(40L, 0.0)    // filled
+        );
+        assertSamplesEqual("Default fill value test", expectedSamples, resultSeries.getSamples());
+    }
+
+    /**
+     * Test with empty input list.
+     */
+    public void testWithEmptyInput() {
+        TransformNullStage stage = new TransformNullStage(1.0);
+        List<TimeSeries> result = stage.process(List.of());
+        assertTrue(result.isEmpty());
+    }
+
+    /**
+     * Test with multiple time series.
+     */
+    public void testMultipleTimeSeries() {
+        TransformNullStage stage = new TransformNullStage(2.0);
+
+        // First time series: has one valid sample at 20L, missing at 10L
+        List<Sample> samples1 = List.of(new FloatSample(20L, 5.0));
+        ByteLabels labels1 = ByteLabels.fromStrings("name", "ts1");
+        TimeSeries ts1 = new TimeSeries(samples1, labels1, 10L, 20L, 10L, null);
+
+        // Second time series: has one valid sample at 100L, missing at 110L
+        List<Sample> samples2 = List.of(new FloatSample(100L, 10.0));
+        ByteLabels labels2 = ByteLabels.fromStrings("name", "ts2");
+        TimeSeries ts2 = new TimeSeries(samples2, labels2, 100L, 110L, 10L, null);
+
+        List<TimeSeries> result = stage.process(List.of(ts1, ts2));
+
+        assertEquals(2, result.size());
+
+        // First time series: expected [2.0 at 10L, 5.0 at 20L]
+        List<Sample> expectedSamples1 = List.of(
+            new FloatSample(10L, 2.0),  // filled
+            new FloatSample(20L, 5.0)   // original
+        );
+        assertSamplesEqual("First time series samples", expectedSamples1, result.get(0).getSamples());
+
+        // Second time series: expected [10.0 at 100L, 2.0 at 110L]
+        List<Sample> expectedSamples2 = List.of(
+            new FloatSample(100L, 10.0), // original
+            new FloatSample(110L, 2.0)   // filled
+        );
+        assertSamplesEqual("Second time series samples", expectedSamples2, result.get(1).getSamples());
+    }
+
+    /**
+     * Test getName().
+     */
+    public void testGetName() {
+        TransformNullStage stage = new TransformNullStage(1.0);
+        assertEquals("transform_null", stage.getName());
+    }
+
+    /**
+     * Test getDisplayName() with integer and decimal values.
+     */
+    public void testGetDisplayName() {
+        TransformNullStage stage1 = new TransformNullStage(0.0);
+        assertEquals("transformNull 0", stage1.getDisplayName());
+
+        TransformNullStage stage2 = new TransformNullStage(5.0);
+        assertEquals("transformNull 5", stage2.getDisplayName());
+
+        TransformNullStage stage3 = new TransformNullStage(2.5);
+        assertEquals("transformNull 2.5", stage3.getDisplayName());
+    }
+
+    /**
+     * Test fromArgs() method.
+     */
+    public void testFromArgs() {
+        Map<String, Object> args = Map.of("fill_value", 3.5);
+        TransformNullStage stage = TransformNullStage.fromArgs(args);
+
+        // Empty samples list represents missing data point
+        List<Sample> samples = List.of();
+        ByteLabels labels = ByteLabels.fromStrings("name", "test");
+        TimeSeries timeSeries = new TimeSeries(samples, labels, 10L, 10L, 10L, null);
+
+        List<TimeSeries> result = stage.process(List.of(timeSeries));
+
+        List<Sample> expectedSamples = List.of(new FloatSample(10L, 3.5));
+        assertSamplesEqual("fromArgs test", expectedSamples, result.get(0).getSamples());
+    }
+
+    /**
+     * Test fromArgs() with default fill value (when fill_value is not provided).
+     */
+    public void testFromArgsWithDefaultValue() {
+        Map<String, Object> args = Map.of();
+        TransformNullStage stage = TransformNullStage.fromArgs(args);
+
+        // Empty samples list represents missing data point
+        List<Sample> samples = List.of();
+        ByteLabels labels = ByteLabels.fromStrings("name", "test");
+        TimeSeries timeSeries = new TimeSeries(samples, labels, 10L, 10L, 10L, null);
+
+        List<TimeSeries> result = stage.process(List.of(timeSeries));
+
+        List<Sample> expectedSamples = List.of(new FloatSample(10L, 0.0));
+        assertSamplesEqual("fromArgs with default value test", expectedSamples, result.get(0).getSamples());
+    }
+
+    /**
+     * Test PipelineStageFactory integration.
+     */
+    public void testPipelineStageFactory() {
+        assertTrue(PipelineStageFactory.isStageTypeSupported(TransformNullStage.NAME));
+        PipelineStage stage = PipelineStageFactory.createWithArgs(TransformNullStage.NAME, Map.of("fill_value", 4.0));
+        assertTrue(stage instanceof TransformNullStage);
+    }
+
+    /**
+     * Test PipelineStageFactory.readFrom(StreamInput).
+     */
+    public void testPipelineStageFactoryReadFrom_StreamInput() throws Exception {
+        TransformNullStage original = new TransformNullStage(3.14);
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+            // Factory variant that reads stage name first
+            out.writeString(TransformNullStage.NAME);
+            original.writeTo(out);
+            try (StreamInput in = out.bytes().streamInput()) {
+                PipelineStage restored = PipelineStageFactory.readFrom(in);
+                assertNotNull(restored);
+                assertTrue(restored instanceof TransformNullStage);
+            }
+        }
+    }
+
+    /**
+     * Test toXContent().
+     */
+    public void testToXContent() throws IOException {
+        TransformNullStage stage = new TransformNullStage(2.5);
+        try (XContentBuilder builder = XContentFactory.jsonBuilder().startObject()) {
+            stage.toXContent(builder, EMPTY_PARAMS);
+            builder.endObject();
+            String json = builder.toString();
+            assertEquals("{\"fill_value\":2.5}", json);
+        }
+    }
+
+    /**
+     * Test supportConcurrentSegmentSearch().
+     */
+    public void testSupportConcurrentSegmentSearch() {
+        TransformNullStage stage = new TransformNullStage(1.0);
+        assertFalse(stage.supportConcurrentSegmentSearch());
+    }
+
+    @Override
+    protected TransformNullStage createTestInstance() {
+        double fillValue = randomDouble() * 100;
+        return new TransformNullStage(fillValue);
+    }
+
+    @Override
+    protected Writeable.Reader<TransformNullStage> instanceReader() {
+        return TransformNullStage::readFrom;
+    }
+}

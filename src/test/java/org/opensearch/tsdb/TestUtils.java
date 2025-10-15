@@ -64,6 +64,11 @@ public class TestUtils {
     }
 
     /**
+     * Default delta value for sample value comparison.
+     */
+    private static final double DEFAULT_SAMPLE_DELTA = 0.0001;
+
+    /**
      * Assert that two lists of samples are equal within a tolerance for float values.
      * Timestamps must match exactly, but float values are compared with a delta.
      *
@@ -80,5 +85,17 @@ public class TestUtils {
             assertEquals(message + " - timestamp at index " + i, expectedSample.getTimestamp(), actualSample.getTimestamp());
             assertEquals(message + " - value at index " + i, expectedSample.getValue(), actualSample.getValue(), delta);
         }
+    }
+
+    /**
+     * Assert that two lists of samples are equal within the default tolerance for float values.
+     * Timestamps must match exactly, but float values are compared with a default delta of 0.0001.
+     *
+     * @param message Description of what is being compared
+     * @param expected Expected list of samples
+     * @param actual Actual list of samples
+     */
+    public static void assertSamplesEqual(String message, List<Sample> expected, List<Sample> actual) {
+        assertSamplesEqual(message, expected, actual, DEFAULT_SAMPLE_DELTA);
     }
 }

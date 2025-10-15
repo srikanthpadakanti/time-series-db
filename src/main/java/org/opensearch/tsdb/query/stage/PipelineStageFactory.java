@@ -21,6 +21,7 @@ import org.opensearch.tsdb.lang.m3.stage.SumStage;
 import org.opensearch.tsdb.lang.m3.stage.UnionStage;
 import org.opensearch.tsdb.lang.m3.stage.ValueFilterStage;
 import org.opensearch.tsdb.lang.m3.stage.TimeshiftStage;
+import org.opensearch.tsdb.lang.m3.stage.TransformNullStage;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -97,6 +98,7 @@ public class PipelineStageFactory {
             registerStage(SortStage.class);
             registerStage(SumStage.class);
             registerStage(TimeshiftStage.class);
+            registerStage(TransformNullStage.class);
             registerStage(UnionStage.class);
             registerStage(ValueFilterStage.class);
         } catch (Exception e) {
