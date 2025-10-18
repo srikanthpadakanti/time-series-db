@@ -10,7 +10,10 @@ package org.opensearch.tsdb.utils;
 import org.opensearch.common.time.DateFormatter;
 import org.opensearch.common.time.DateMathParser;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Utility class for parsing timestamp strings.
@@ -67,6 +70,44 @@ public class TimestampUtils {
                 e
             );
         }
+    }
+
+    /**
+     * Generate timestamp range based on start, end, and step
+     * @param start Start timestamp (inclusive)
+     * @param end End timestamp (inclusive)
+     * @param step Step duration
+     * @return List of timestamps from start to end with given step
+     * @throws IllegalArgumentException if parameters are invalid
+     */
+    public static List<Instant> generateTimestampRange(Instant start, Instant end, Duration step) {
+        if (start == null || end == null || step == null) {
+            throw new IllegalArgumentException("Start, end, and step cannot be null");
+        }
+
+        if (step.isZero() || step.isNegative()) {
+            throw new IllegalArgumentException("Step must be positive and non-zero");
+        }
+
+        if (start.isAfter(end)) {
+            throw new IllegalArgumentException("Start timestamp cannot be after end timestamp");
+        }
+
+        // Calculate the number of timestamps to pre-allocate the list
+        // TODO: Update this to use the appropriate time unit when we add time unit as a config
+        long durationMillis = end.toEpochMilli() - start.toEpochMilli();
+        long stepMillis = step.toMillis();
+        int capacity = (int) (durationMillis / stepMillis) + 1;
+
+        List<Instant> timestamps = new ArrayList<>(capacity);
+        Instant current = start;
+
+        while (!current.isAfter(end)) {
+            timestamps.add(current);
+            current = current.plus(step);
+        }
+
+        return timestamps;
     }
 
 }

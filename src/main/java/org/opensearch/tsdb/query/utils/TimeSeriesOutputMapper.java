@@ -141,7 +141,7 @@ public class TimeSeriesOutputMapper {
      * @param value the double value to format
      * @return the formatted string representation
      */
-    private static String formatPrometheusValue(double value) {
+    public static String formatPrometheusValue(double value) {
         if (Double.isNaN(value)) {
             return "NaN";
         } else if (value == Double.POSITIVE_INFINITY) {
