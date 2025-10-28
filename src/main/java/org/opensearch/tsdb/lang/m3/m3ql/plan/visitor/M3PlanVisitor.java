@@ -20,6 +20,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IsNonNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.RemoveEmptyPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScalePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SortPlanNode;
@@ -133,6 +134,15 @@ public abstract class M3PlanVisitor<T> {
      * @return the result of processing the PerSecondPlanNode
      */
     public T visit(PerSecondPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for IsNonNullPlanNode.
+     * @param planNode the IsNonNullPlanNode to visit
+     * @return the result of processing the IsNonNullPlanNode
+     */
+    public T visit(IsNonNullPlanNode planNode) {
         return process(planNode);
     }
 

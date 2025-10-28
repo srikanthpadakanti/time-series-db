@@ -149,7 +149,7 @@ public class IsNonNullStageTests extends AbstractWireSerializingTestCase<IsNonNu
      */
     public void testGetName() {
         IsNonNullStage stage = new IsNonNullStage();
-        assertEquals("is_non_null", stage.getName());
+        assertEquals("isNonNull", stage.getName());
     }
 
     /**
@@ -173,7 +173,7 @@ public class IsNonNullStageTests extends AbstractWireSerializingTestCase<IsNonNu
     public void testFromArgs() {
         Map<String, Object> args = new HashMap<>();
         IsNonNullStage stage = IsNonNullStage.fromArgs(args);
-        assertEquals("is_non_null", stage.getName());
+        assertEquals("isNonNull", stage.getName());
     }
 
     /**
@@ -189,11 +189,11 @@ public class IsNonNullStageTests extends AbstractWireSerializingTestCase<IsNonNu
      */
     public void testCreateWithFactory() {
         Map<String, Object> args = Map.of();
-        PipelineStage stage = PipelineStageFactory.createWithArgs("is_non_null", args);
+        PipelineStage stage = PipelineStageFactory.createWithArgs("isNonNull", args);
 
         assertNotNull(stage);
         assertTrue(stage instanceof IsNonNullStage);
-        assertEquals("is_non_null", stage.getName());
+        assertEquals("isNonNull", stage.getName());
     }
 
     /**

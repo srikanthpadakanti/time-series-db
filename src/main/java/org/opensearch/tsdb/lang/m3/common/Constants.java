@@ -102,6 +102,11 @@ public class Constants {
         public static final String PER_SECOND = "perSecond";
 
         /**
+         * isNonNull function name.
+         */
+        public static final String IS_NON_NULL = "isNonNull";
+
+        /**
          * removeEmpty function name.
          */
         public static final String REMOVE_EMPTY = "removeEmpty";

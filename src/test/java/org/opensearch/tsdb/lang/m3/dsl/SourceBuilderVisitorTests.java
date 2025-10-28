@@ -24,6 +24,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FetchPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IsNonNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
@@ -314,6 +315,27 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
 
         IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
         assertEquals("HistogramPercentilePlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test IsNonNullPlanNode with correct number of children (1).
+     */
+    public void testIsNonNullPlanNodeWithOneChild() {
+        IsNonNullPlanNode planNode = new IsNonNullPlanNode(1);
+        planNode.addChild(createMockFetchNode(2));
+
+        // Should not throw an exception
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test IsNonNullPlanNode with incorrect number of children (0).
+     */
+    public void testIsNonNullPlanNodeWithNoChildren() {
+        IsNonNullPlanNode planNode = new IsNonNullPlanNode(1);
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("IsNonNullPlanNode must have exactly one child", exception.getMessage());
     }
 
     /**

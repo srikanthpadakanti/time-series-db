@@ -61,10 +61,10 @@ import java.util.Map;
  * </ul>
  *
  */
-@PipelineStageAnnotation(name = "is_non_null")
+@PipelineStageAnnotation(name = "isNonNull")
 public class IsNonNullStage implements UnaryPipelineStage {
     /** The name identifier for this pipeline stage. */
-    public static final String NAME = "is_non_null";
+    public static final String NAME = "isNonNull";
 
     /**
      * Constructor for isNonNull stage.
