@@ -219,6 +219,7 @@ void AliasArgument(M3ASTNode parentNode) :
             getToken(1).kind != LITERAL_COMMENT &&
             getToken(1).kind != PIPE &&
             getToken(1).kind != SEMICOLON &&
+            getToken(1).kind != RPAREN &&
             getToken(1).kind != 0
         })
         (

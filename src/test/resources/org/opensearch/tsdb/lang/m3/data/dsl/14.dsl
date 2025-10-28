@@ -392,7 +392,22 @@
         "inputReference" : "2"
       }
     },
-    "9" : {
+    "7_coordinator" : {
+      "coordinator_pipeline" : {
+        "buckets_path" : [ ],
+        "stages" : [
+          {
+            "type" : "alias",
+            "pattern" : "metric)() with parens"
+          }
+        ],
+        "references" : {
+          "7_unfold" : "7>7_unfold"
+        },
+        "inputReference" : "7_unfold"
+      }
+    },
+    "10" : {
       "coordinator_pipeline" : {
         "buckets_path" : [ ],
         "stages" : [
@@ -406,18 +421,18 @@
         ],
         "references" : {
           "5" : "5",
-          "7" : "7>7_unfold"
+          "7" : "7_coordinator"
         },
         "inputReference" : "5"
       }
     },
-    "11" : {
+    "12" : {
       "coordinator_pipeline" : {
         "buckets_path" : [ ],
         "stages" : [
           {
             "type" : "as_percent",
-            "right_op_reference" : "9"
+            "right_op_reference" : "10"
           },
           {
             "type" : "moving",
@@ -427,7 +442,7 @@
         ],
         "references" : {
           "0" : "0>0_unfold",
-          "9" : "9"
+          "10" : "10"
         },
         "inputReference" : "0"
       }
