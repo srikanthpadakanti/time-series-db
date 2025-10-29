@@ -300,11 +300,13 @@ void Tag(FunctionNode parentNode) :
         parentNode.addChildNode(tagKeyNode);
         token_source.SwitchTo(LITERAL_MODE);
     }
+    (t = <LITERAL_SPACE> { /* Consume and ignore leading spaces e.g. 'name:   abcd' */ } )*
     [
       <EXCLAMATION_MARK> {
           Objects.requireNonNull(tagKeyNode, "! only allowed in tag value expression");
           tagKeyNode.setInverted(true);
       }
+      (t = <LITERAL_SPACE> { /* Consume and ignore trailing spaces e.g. 'name:!   abcd' */ } )*
     ]
     TagValueArgument(tagKeyNode)
 

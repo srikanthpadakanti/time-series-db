@@ -2,6 +2,6 @@ UNION
   AGG(SUM, groupBy=[])
     UNION
       TRANSFORM_NULL(0.0)
-        FETCH({region=[north*]}, !{})
+        FETCH({country=[us]}, !{region=[north*]})
       FETCH({state=[xyz]}, !{})
   FETCH({city=[toronto]}, !{})

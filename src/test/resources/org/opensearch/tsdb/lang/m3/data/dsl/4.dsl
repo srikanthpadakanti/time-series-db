@@ -7,9 +7,9 @@
           "bool" : {
             "filter" : [
               {
-                "wildcard" : {
+                "term" : {
                   "labels" : {
-                    "wildcard" : "region:north*",
+                    "value" : "country:us",
                     "boost" : 1.0
                   }
                 }
@@ -32,6 +32,16 @@
                     "to" : null,
                     "include_lower" : true,
                     "include_upper" : true,
+                    "boost" : 1.0
+                  }
+                }
+              }
+            ],
+            "must_not" : [
+              {
+                "wildcard" : {
+                  "labels" : {
+                    "wildcard" : "region:north*",
                     "boost" : 1.0
                   }
                 }
@@ -129,9 +139,9 @@
         "bool" : {
           "filter" : [
             {
-              "wildcard" : {
+              "term" : {
                 "labels" : {
-                  "wildcard" : "region:north*",
+                  "value" : "country:us",
                   "boost" : 1.0
                 }
               }
@@ -154,6 +164,16 @@
                   "to" : null,
                   "include_lower" : true,
                   "include_upper" : true,
+                  "boost" : 1.0
+                }
+              }
+            }
+          ],
+          "must_not" : [
+            {
+              "wildcard" : {
+                "labels" : {
+                  "wildcard" : "region:north*",
                   "boost" : 1.0
                 }
               }
