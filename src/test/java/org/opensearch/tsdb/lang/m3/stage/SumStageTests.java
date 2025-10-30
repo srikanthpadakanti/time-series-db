@@ -22,6 +22,7 @@ import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -312,6 +313,39 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
             List.of(new FloatSample(1000L, 39.0), new FloatSample(2000L, 83.0), new FloatSample(3000L, 127.0)),
             reduced.getSamples()
         );
+    }
+
+    public void testReduceEmptyAggregation() throws Exception {
+        // Test Empty Aggregation
+        assertThrows(IllegalArgumentException.class, () -> sumStage.reduce(Collections.emptyList(), false));
+
+        // Test with Aggregation with empty TS
+        List<TimeSeriesProvider> aggregations_1 = List.of(
+            new InternalTimeSeries("test1", Collections.emptyList(), Map.of()),
+            new InternalTimeSeries("test2", Collections.emptyList(), Map.of())
+        );
+        InternalAggregation result = sumStage.reduce(aggregations_1, false);
+        assertNotNull(result);
+        assertTrue(result instanceof TimeSeriesProvider);
+        TimeSeriesProvider provider = (TimeSeriesProvider) result;
+        List<TimeSeries> timeSeries = provider.getTimeSeries();
+        assertEquals(0, timeSeries.size());
+
+        // Test Aggregation with one of empty TS
+        List<TimeSeriesProvider> aggregations_2 = List.of(
+            new InternalTimeSeries("test1", Collections.emptyList(), Map.of()),
+            new InternalTimeSeries("test2", TEST_TIME_SERIES.subList(3, 5), Map.of())
+        );
+        result = sumStage.reduce(aggregations_2, false);
+        assertNotNull(result);
+        assertTrue(result instanceof TimeSeriesProvider);
+        provider = (TimeSeriesProvider) result;
+        timeSeries = provider.getTimeSeries();
+        TimeSeries reduced = timeSeries.get(0);
+        assertEquals(3, reduced.getSamples().size());
+
+        // Values should be summed across aggregations
+        assertEquals(List.of(new FloatSample(1000L, 4.0), new FloatSample(2000L, 8.0), new FloatSample(3000L, 12.0)), reduced.getSamples());
     }
 
     public void testFromArgsNoGrouping() {

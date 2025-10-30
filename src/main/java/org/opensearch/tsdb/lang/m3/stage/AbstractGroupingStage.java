@@ -21,6 +21,7 @@ import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -260,8 +261,15 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
             throw new IllegalArgumentException("Aggregations list cannot be null or empty");
         }
 
+        // we reuse firstAgg's metaData/name to create final aggregation
         TimeSeriesProvider firstAgg = aggregations.get(0);
-        return reduceGrouped(aggregations, firstAgg, isFinalReduce);
+        // we reuse first nonEmpty time series' metaData(min/maxTimestamp/step) to create time series
+        TimeSeries firstTimeSeries = findFirstNonEmptyTimeSeries(aggregations);
+        if (firstTimeSeries == null) {
+            TimeSeriesProvider result = firstAgg.createReduced(Collections.emptyList());
+            return (InternalAggregation) result;
+        }
+        return reduceGrouped(aggregations, firstAgg, firstTimeSeries, isFinalReduce);
     }
 
     /**
@@ -269,15 +277,26 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
      * This method is intended for distributed aggregation scenarios.
      *
      * @param aggregations List of aggregations to reduce.
-     * @param firstAgg The first aggregation in the list, used as a reference or starting point.
+     * @param firstAgg The first aggregation in the list, used as final aggregation meta reference.
+     * @param firstTimeSeries, first nonEmpty time series across aggregations, used as time series metadata reference
      * @param isFinalReduce True if this is the final reduction phase, false otherwise.
      * @return The reduced InternalAggregation result.
      */
     protected abstract InternalAggregation reduceGrouped(
         List<TimeSeriesProvider> aggregations,
         TimeSeriesProvider firstAgg,
+        TimeSeries firstTimeSeries,
         boolean isFinalReduce
     );
+
+    /**
+     * Find the first non-empty TimeSeries from all aggregations
+     * @param aggregations
+     * @return
+     */
+    private TimeSeries findFirstNonEmptyTimeSeries(List<TimeSeriesProvider> aggregations) {
+        return aggregations.stream().flatMap(provider -> provider.getTimeSeries().stream()).findFirst().orElse(null);
+    }
 
     /**
      * Common toXContent implementation for all grouping stages.

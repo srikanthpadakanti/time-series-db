@@ -23,9 +23,11 @@ import org.opensearch.tsdb.query.stage.PipelineStage;
 import org.opensearch.tsdb.query.stage.PipelineStageFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+// TODO refactor Test Case for all subclasses for AbstractGroupingStage
 public class CountStageTests extends AbstractWireSerializingTestCase<CountStage> {
 
     private CountStage countStage;
@@ -96,7 +98,10 @@ public class CountStageTests extends AbstractWireSerializingTestCase<CountStage>
 
     public void testReduceWithoutGrouping() throws Exception {
         // Test reduce() during final reduce phase
-        List<TimeSeriesProvider> aggregations = createMockAggregations();
+        List<TimeSeries> series1 = TEST_TIME_SERIES.subList(0, 3); // ts1, ts2, ts3
+        List<TimeSeries> series2 = TEST_TIME_SERIES.subList(3, 5); // ts4, ts5
+
+        List<TimeSeriesProvider> aggregations = createMockAggregations(series1, series2);
 
         InternalAggregation result = countStage.reduce(aggregations, true);
 
@@ -124,7 +129,9 @@ public class CountStageTests extends AbstractWireSerializingTestCase<CountStage>
 
     public void testReduceWithGrouping() throws Exception {
         // Test reduce() during intermediate reduce phase
-        List<TimeSeriesProvider> aggregations = createMockAggregations();
+        List<TimeSeries> series1 = TEST_TIME_SERIES.subList(0, 3); // ts1, ts2, ts3
+        List<TimeSeries> series2 = TEST_TIME_SERIES.subList(3, 5); // ts4, ts5
+        List<TimeSeriesProvider> aggregations = createMockAggregations(series1, series2);
 
         InternalAggregation result = countStageWithLabels.reduce(aggregations, false);
 
@@ -151,7 +158,42 @@ public class CountStageTests extends AbstractWireSerializingTestCase<CountStage>
             .findFirst()
             .orElse(null);
         assertSampleEqualsCount(service2Group, 3, 3.0);
+    }
 
+    public void testReduceWithEmptyAggregation() throws Exception {
+        // Test Empty Aggregation
+        assertThrows(IllegalArgumentException.class, () -> countStageWithLabels.reduce(Collections.emptyList(), false));
+
+        // Test with 1 Aggregation with empty TS
+        List<TimeSeries> series1 = Collections.emptyList();
+        List<TimeSeries> series2 = TEST_TIME_SERIES.subList(3, 5); // ts4, ts5
+        List<TimeSeriesProvider> aggregations_1 = createMockAggregations(series1, series2);
+
+        InternalAggregation result = countStageWithLabels.reduce(aggregations_1, false);
+
+        assertNotNull(result);
+        assertTrue(result instanceof TimeSeriesProvider);
+        TimeSeriesProvider provider = (TimeSeriesProvider) result;
+        List<TimeSeries> timeSeries = provider.getTimeSeries();
+        assertEquals(1, timeSeries.size());
+
+        // service:api
+        TimeSeries service2Group = timeSeries.stream()
+            .filter(ts -> "service2".equals(ts.getLabels().get("service")))
+            .findFirst()
+            .orElse(null);
+        assertSampleEqualsCount(service2Group, 3, 3.0);
+
+        // Test with all Aggregation with empty TS
+        List<TimeSeriesProvider> aggregations_2 = createMockAggregations(Collections.emptyList(), Collections.emptyList());
+
+        result = countStageWithLabels.reduce(aggregations_2, false);
+
+        assertNotNull(result);
+        assertTrue(result instanceof TimeSeriesProvider);
+        provider = (TimeSeriesProvider) result;
+        timeSeries = provider.getTimeSeries();
+        assertEquals(0, timeSeries.size());
     }
 
     public void testNeedsConsolidation() {
@@ -177,11 +219,7 @@ public class CountStageTests extends AbstractWireSerializingTestCase<CountStage>
         return new TimeSeries(samples, labelMap, 1000L, 1000L + (values.size() - 1) * 1000, 1000L, alias);
     }
 
-    private List<TimeSeriesProvider> createMockAggregations() {
-        // Split the test data into two aggregations for reduce testing
-        List<TimeSeries> series1 = TEST_TIME_SERIES.subList(0, 3); // ts1, ts2, ts3
-        List<TimeSeries> series2 = TEST_TIME_SERIES.subList(3, 5); // ts4, ts5
-
+    private List<TimeSeriesProvider> createMockAggregations(List<TimeSeries> series1, List<TimeSeries> series2) {
         TimeSeriesProvider provider1 = new InternalTimeSeries("test1", series1, Map.of());
         TimeSeriesProvider provider2 = new InternalTimeSeries("test2", series2, Map.of());
 

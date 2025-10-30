@@ -131,6 +131,7 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
     protected final InternalAggregation reduceGrouped(
         List<TimeSeriesProvider> aggregations,
         TimeSeriesProvider firstAgg,
+        TimeSeries firstTimeSeries,
         boolean isFinalReduce
     ) {
         // Combine samples by group across all aggregations
@@ -165,9 +166,7 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
 
             Labels finalLabels = groupLabels.isEmpty() ? ByteLabels.emptyLabels() : groupLabels;
 
-            // Use metadata from the first aggregation
-            // Assumption: process() and reduce() always return non-empty time series with complete metadata
-            TimeSeries firstTimeSeries = firstAgg.getTimeSeries().get(0);
+            // Use metadata from the first nonEmpty time series
             resultTimeSeries.add(
                 new TimeSeries(
                     samples,

@@ -107,7 +107,12 @@ public class CountStage extends AbstractGroupingStage {
     }
 
     @Override
-    protected InternalAggregation reduceGrouped(List<TimeSeriesProvider> aggregations, TimeSeriesProvider firstAgg, boolean isFinalReduce) {
+    protected InternalAggregation reduceGrouped(
+        List<TimeSeriesProvider> aggregations,
+        TimeSeriesProvider firstAgg,
+        TimeSeries firstTimeSeries,
+        boolean isFinalReduce
+    ) {
         // Combine samples by group across all aggregations
         Map<ByteLabels, Double> groupToCount = new HashMap<>();
         for (TimeSeriesProvider aggregation : aggregations) {
@@ -121,9 +126,7 @@ public class CountStage extends AbstractGroupingStage {
         }
 
         // TODO normalize step/min/maxtimestamp across time series.
-        // Use metadata from the first aggregation
-        // Assumption: process() and reduce() always return non-empty time series with complete metadata
-        TimeSeries firstTimeSeries = firstAgg.getTimeSeries().get(0);
+        // Use metadata from the first nonEmpty time series
         long minTimestamp = firstTimeSeries.getMinTimestamp();
         long maxTimestamp = firstTimeSeries.getMaxTimestamp();
         long stepSize = firstTimeSeries.getStep();
