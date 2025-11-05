@@ -654,12 +654,12 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
         TimeSeriesCoordinatorAggregationBuilder timeSeriesCoordinatorAggregationBuilder =
             (TimeSeriesCoordinatorAggregationBuilder) pipelineAggregations.iterator().next();
         assertEquals(
-            "coordinator aggregation contain stages with pushdown disabled",
-            1,
+            "coordinator aggregation should contain moving stage and truncate stage with pushdown disabled",
+            2,
             timeSeriesCoordinatorAggregationBuilder.getStages().size()
         );
         assertTrue(
-            "the stage should be a moving stage",
+            "the first stage should be a moving stage",
             timeSeriesCoordinatorAggregationBuilder.getStages().getFirst() instanceof MovingStage
         );
     }
@@ -681,9 +681,13 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
         assertTrue(aggregations.iterator().next() instanceof TimeSeriesUnfoldAggregationBuilder);
         TimeSeriesUnfoldAggregationBuilder timeSeriesUnfoldAggregationBuilder = (TimeSeriesUnfoldAggregationBuilder) aggregations.iterator()
             .next();
-        assertEquals("unfold aggregation should contain the moving stage", 1, timeSeriesUnfoldAggregationBuilder.getStages().size());
+        assertEquals(
+            "unfold aggregation should contain the moving stage and truncate stage",
+            2,
+            timeSeriesUnfoldAggregationBuilder.getStages().size()
+        );
 
-        MovingStage movingStage = (MovingStage) timeSeriesUnfoldAggregationBuilder.getStages().getFirst();
+        MovingStage movingStage = (MovingStage) timeSeriesUnfoldAggregationBuilder.getStages().get(0);
 
         try (XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()) {
             xContentBuilder.startObject();

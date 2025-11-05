@@ -193,7 +193,7 @@ public class TruncateStage implements UnaryPipelineStage {
 
     @Override
     public boolean supportConcurrentSegmentSearch() {
-        return false;
+        return true;
     }
 
     @Override

@@ -208,4 +208,12 @@ public class TruncateStageTests extends AbstractWireSerializingTestCase<Truncate
         TruncateStage stage = new TruncateStage(100L, 200L);
         assertNullInputThrowsException(stage, "truncate");
     }
+
+    /**
+     * Test that TruncateStage supports concurrent segment search.
+     */
+    public void testSupportConcurrentSegmentSearch() {
+        TruncateStage stage = new TruncateStage(10L, 50L);
+        assertTrue("TruncateStage should support concurrent segment search", stage.supportConcurrentSegmentSearch());
+    }
 }

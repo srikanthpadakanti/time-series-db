@@ -518,6 +518,11 @@
             "type" : "moving",
             "interval" : 3600000,
             "function" : "avg"
+          },
+          {
+            "type" : "truncate",
+            "min_timestamp" : 1000000000,
+            "max_timestamp" : 1001000000
           }
         ],
         "references" : {

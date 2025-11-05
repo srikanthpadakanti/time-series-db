@@ -438,6 +438,11 @@
             "type" : "moving",
             "interval" : 300000,
             "function" : "min"
+          },
+          {
+            "type" : "truncate",
+            "min_timestamp" : 1000000000,
+            "max_timestamp" : 1001000000
           }
         ],
         "references" : {

@@ -43,6 +43,7 @@ import org.opensearch.tsdb.lang.m3.stage.SummarizeStage;
 import org.opensearch.tsdb.lang.m3.stage.SumStage;
 import org.opensearch.tsdb.lang.m3.stage.TimeshiftStage;
 import org.opensearch.tsdb.lang.m3.stage.TransformNullStage;
+import org.opensearch.tsdb.lang.m3.stage.TruncateStage;
 import org.opensearch.tsdb.lang.m3.stage.UnionStage;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
@@ -100,6 +101,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     private final Stack<UnaryPipelineStage> stageStack; // accumulate stages per fetch pipeline
     private final M3OSTranslator.Params params;
     private final Context context;
+    private final boolean isRootVisitor; // true if this is the top-level visitor (not a child visitor)
 
     /**
      * Constructor for QueryComponentsVisitor.
@@ -107,7 +109,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
      * @param params params for query translation
      */
     public SourceBuilderVisitor(M3OSTranslator.Params params) {
-        this(params, Context.newContext());
+        this(params, Context.newContext(), true);
     }
 
     /**
@@ -115,10 +117,12 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
      *
      * @param params  params to inherit from parent
      * @param context context to inherit from parent
+     * @param isRootVisitor whether this is the root visitor (vs a child visitor for sub-plans)
      */
-    private SourceBuilderVisitor(M3OSTranslator.Params params, Context context) {
+    private SourceBuilderVisitor(M3OSTranslator.Params params, Context context, boolean isRootVisitor) {
         this.params = params;
         this.context = context;
+        this.isRootVisitor = isRootVisitor;
         this.stageStack = new Stack<>();
     }
 
@@ -130,16 +134,23 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         // Cumulative time shift applied by timeshift stages
         private long timeShift;
 
-        private Context(long timeBuffer, long timeShift) {
+        // Flag to track if time buffer was ever adjusted (non-zero)
+        private boolean timeBufferAdjusted;
+
+        private Context(long timeBuffer, long timeShift, boolean timeBufferAdjusted) {
             this.timeBuffer = timeBuffer;
             this.timeShift = timeShift;
+            this.timeBufferAdjusted = timeBufferAdjusted;
         }
 
         private static Context newContext() {
-            return new Context(0L, 0L);
+            return new Context(0L, 0L, false);
         }
 
         private void setTimeBuffer(long timeBuffer) {
+            if (timeBuffer > 0 && timeBuffer != this.timeBuffer) {
+                this.timeBufferAdjusted = true;
+            }
             this.timeBuffer = timeBuffer;
         }
 
@@ -153,6 +164,10 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
 
         private long getTimeShift() {
             return timeShift;
+        }
+
+        private boolean isTimeBufferAdjusted() {
+            return timeBufferAdjusted;
         }
     }
 
@@ -213,6 +228,15 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
 
     @Override
     public ComponentHolder visit(FetchPlanNode planNode) {
+        // If this is the root visitor and time buffer was adjusted, add TruncateStage at the bottom of the stack
+        // This ensures it executes LAST in the final coordinator pipeline
+        if (isRootVisitor && context.isTimeBufferAdjusted()) {
+            // Check if the first element in the stack is already a TruncateStage to avoid duplicates
+            if (stageStack.isEmpty() || !(stageStack.get(0) instanceof TruncateStage)) {
+                stageStack.add(0, new TruncateStage(params.startTime(), params.endTime()));
+            }
+        }
+
         String unfoldName = planNode.getId() + UNFOLD_NAME_SUFFIX;
         TimeRange fetchTimeRange = getAdjustedFetchTimeRange();
 
@@ -301,7 +325,8 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             keepLastValueStage = new KeepLastValueStage(getDurationAsLong(planNode.duration()));
 
             // TODO: M3 doesn't look back for keepLastValue, align on behavior (including for non-specified duration)
-            context.setTimeBuffer(Math.max(context.getTimeBuffer(), getDurationAsLong(planNode.duration())));
+            // We currently disable this for validation. If we want to enable this, uncomment the line below.
+            // context.setTimeBuffer(Math.max(context.getTimeBuffer(), getDurationAsLong(planNode.duration())));
         }
 
         stageStack.add(keepLastValueStage);
@@ -326,6 +351,8 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             long window = getDurationAsLong(planNode.getTimeDuration());
             MovingStage movingStage = new MovingStage(window, planNode.getAggregationType());
             stageStack.add(movingStage);
+
+            // Extend the time buffer to fetch enough historical data for the moving window
             context.setTimeBuffer(Math.max(context.getTimeBuffer(), window));
         }
 
@@ -528,7 +555,8 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         ComponentHolder[] childComponents = new ComponentHolder[planNode.getChildren().size()];
         for (int i = 0; i < planNode.getChildren().size(); i++) {
             M3PlanNode child = planNode.getChildren().get(i);
-            childComponents[i] = new SourceBuilderVisitor(params, context).process(child);
+            // Create child visitors with isRootVisitor=false since these are sub-plans
+            childComponents[i] = new SourceBuilderVisitor(params, context, false).process(child);
         }
         ComponentHolder merged = ComponentHolder.merge(planNode.getId(), childComponents);
 
@@ -550,6 +578,12 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
 
         while (!stageStack.isEmpty()) {
             stages.add(stageStack.pop());
+        }
+
+        // Add TruncateStage at the end if time buffer was adjusted AND this is the root visitor
+        // This is the final coordinator for multi-fetch queries (union/binary operations)
+        if (isRootVisitor && context.isTimeBufferAdjusted()) {
+            stages.add(new TruncateStage(params.startTime(), params.endTime()));
         }
 
         // Add the left-hand side reference
