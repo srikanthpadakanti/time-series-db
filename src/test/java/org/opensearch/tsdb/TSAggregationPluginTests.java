@@ -1399,32 +1399,32 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
             assertEquals("Should have 7 percentile series", 7, timeSeries.size());
 
             // Find each percentile series by label
-            List<TimeSeries> p0List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "0.0"));
-            assertEquals("Should have exactly 1 series with _percentile=0.0", 1, p0List.size());
+            List<TimeSeries> p0List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "0"));
+            assertEquals("Should have exactly 1 series with _percentile=0", 1, p0List.size());
             TimeSeries p0Series = p0List.get(0);
 
-            List<TimeSeries> p30List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "30.0"));
-            assertEquals("Should have exactly 1 series with _percentile=30.0", 1, p30List.size());
+            List<TimeSeries> p30List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "30"));
+            assertEquals("Should have exactly 1 series with _percentile=30", 1, p30List.size());
             TimeSeries p30Series = p30List.get(0);
 
-            List<TimeSeries> p50List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "50.0"));
-            assertEquals("Should have exactly 1 series with _percentile=50.0", 1, p50List.size());
+            List<TimeSeries> p50List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "50"));
+            assertEquals("Should have exactly 1 series with _percentile=50", 1, p50List.size());
             TimeSeries p50Series = p50List.get(0);
 
-            List<TimeSeries> p90List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "90.0"));
-            assertEquals("Should have exactly 1 series with _percentile=90.0", 1, p90List.size());
+            List<TimeSeries> p90List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "90"));
+            assertEquals("Should have exactly 1 series with _percentile=90", 1, p90List.size());
             TimeSeries p90Series = p90List.get(0);
 
-            List<TimeSeries> p95List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "95.0"));
-            assertEquals("Should have exactly 1 series with _percentile=95.0", 1, p95List.size());
+            List<TimeSeries> p95List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "95"));
+            assertEquals("Should have exactly 1 series with _percentile=95", 1, p95List.size());
             TimeSeries p95Series = p95List.get(0);
 
-            List<TimeSeries> p99List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "99.0"));
-            assertEquals("Should have exactly 1 series with _percentile=99.0", 1, p99List.size());
+            List<TimeSeries> p99List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "99"));
+            assertEquals("Should have exactly 1 series with _percentile=99", 1, p99List.size());
             TimeSeries p99Series = p99List.get(0);
 
-            List<TimeSeries> p100List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "100.0"));
-            assertEquals("Should have exactly 1 series with _percentile=100.0", 1, p100List.size());
+            List<TimeSeries> p100List = findSeriesWithLabels(timeSeries, Map.of("_percentile", "100"));
+            assertEquals("Should have exactly 1 series with _percentile=100", 1, p100List.size());
             TimeSeries p100Series = p100List.get(0);
 
             // Verify 0th percentile (minimum)

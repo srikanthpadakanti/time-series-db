@@ -32,13 +32,14 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
     /**
      * Test percentile calculation across multiple time series with varying sparseness.
      * This test verifies:
-     * - Multiple percentiles (0, 30, 50, 90, 95, 99, 100)
+     * - Multiple percentiles (0, 30, 50, 90, 95, 99, 99.5, 100)
      * - Dense and sparse time series
      * - Correct percentile calculation at each timestamp
+     * - Decimal percentile label formatting (99.5 should keep decimal, 99 should not)
      */
     public void testPercentileOfSeries() {
         PercentileOfSeriesStage stage = new PercentileOfSeriesStage(
-            List.of(0.0f, 30.0f, 50.0f, 90.0f, 95.0f, 99.0f, 100.0f),
+            List.of(0.0f, 30.0f, 50.0f, 90.0f, 95.0f, 99.0f, 99.5f, 100.0f),
             false // no interpolation
         );
 
@@ -71,17 +72,18 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         List<TimeSeries> result = stage.process(List.of(series1, series2, series3, series4, series5));
 
-        // Should have 7 output series (one per percentile: 0, 30, 50, 90, 95, 99, 100)
-        assertEquals("Should have 7 percentile series", 7, result.size());
+        // Should have 8 output series (one per percentile: 0, 30, 50, 90, 95, 99, 99.5, 100)
+        assertEquals("Should have 8 percentile series", 8, result.size());
 
         // Find each percentile series by label
-        TimeSeries p0Series = findSeriesByLabel(result, "_percentile", "0.0");
-        TimeSeries p30Series = findSeriesByLabel(result, "_percentile", "30.0");
-        TimeSeries p50Series = findSeriesByLabel(result, "_percentile", "50.0");
-        TimeSeries p90Series = findSeriesByLabel(result, "_percentile", "90.0");
-        TimeSeries p95Series = findSeriesByLabel(result, "_percentile", "95.0");
-        TimeSeries p99Series = findSeriesByLabel(result, "_percentile", "99.0");
-        TimeSeries p100Series = findSeriesByLabel(result, "_percentile", "100.0");
+        TimeSeries p0Series = findSeriesByLabel(result, "_percentile", "0");
+        TimeSeries p30Series = findSeriesByLabel(result, "_percentile", "30");
+        TimeSeries p50Series = findSeriesByLabel(result, "_percentile", "50");
+        TimeSeries p90Series = findSeriesByLabel(result, "_percentile", "90");
+        TimeSeries p95Series = findSeriesByLabel(result, "_percentile", "95");
+        TimeSeries p99Series = findSeriesByLabel(result, "_percentile", "99");
+        TimeSeries p99_5Series = findSeriesByLabel(result, "_percentile", "99.5");
+        TimeSeries p100Series = findSeriesByLabel(result, "_percentile", "100");
 
         // Verify 0th percentile (minimum)
         // t=1000: [10,20,30,40,50] -> fractionalRank=0.0*5=0.0, ceil=0, <=1 -> 10
@@ -124,6 +126,13 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         // t=3000: [15,25,35] -> fractionalRank=0.99*3=2.97, ceil=3, index=2 -> 35
         List<Sample> expectedP99 = List.of(new FloatSample(1000L, 50.0f), new FloatSample(2000L, 400.0f), new FloatSample(3000L, 35.0f));
         assertSamplesEqual("99th percentile", expectedP99, p99Series.getSamples());
+
+        // Verify 99.5th percentile (validates decimal percentile label formatting)
+        // t=1000: [10,20,30,40,50] -> fractionalRank=0.995*5=4.975, ceil=5, index=4 -> 50
+        // t=2000: [100,200,300,400] -> fractionalRank=0.995*4=3.98, ceil=4, index=3 -> 400
+        // t=3000: [15,25,35] -> fractionalRank=0.995*3=2.985, ceil=3, index=2 -> 35
+        List<Sample> expectedP99_5 = List.of(new FloatSample(1000L, 50.0f), new FloatSample(2000L, 400.0f), new FloatSample(3000L, 35.0f));
+        assertSamplesEqual("99.5th percentile", expectedP99_5, p99_5Series.getSamples());
 
         // Verify 100th percentile (maximum)
         // t=1000: [10,20,30,40,50] -> fractionalRank=1.0*5=5.0, ceil=5, index=4 -> 50
@@ -503,7 +512,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         // ========== Group 1: region=us-west, env=prod (values: [10,20,30]) ==========
 
         // 0th percentile: fractionalRank=0.0*3=0.0, ceil=0, rankAsInt=0, <=1 -> first element
-        List<TimeSeries> group1P0List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "0.0"));
+        List<TimeSeries> group1P0List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "0"));
         assertEquals(1, group1P0List.size());
         assertSamplesEqual(
             "Group1 P0",
@@ -512,7 +521,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         );
 
         // 30th percentile: fractionalRank=0.3*3=0.9, ceil=1, rankAsInt=1, <=1 -> first element (no interpolation possible)
-        List<TimeSeries> group1P30List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "30.0"));
+        List<TimeSeries> group1P30List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "30"));
         assertEquals(1, group1P30List.size());
         assertSamplesEqual(
             "Group1 P30",
@@ -522,7 +531,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         // 50th percentile: fractionalRank=0.5*3=1.5, ceil=2, rankAsInt=2, index=1 -> 20
         // Interpolation: prevValue=10 (index=0), fraction=1.5-1=0.5 -> 10 + 0.5*(20-10) = 15
-        List<TimeSeries> group1P50List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "50.0"));
+        List<TimeSeries> group1P50List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "50"));
         assertEquals(1, group1P50List.size());
         assertSamplesEqual(
             "Group1 P50",
@@ -532,7 +541,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         // 70th percentile: fractionalRank=0.7*3=2.1, ceil=3, rankAsInt=3, index=2 -> 30
         // Interpolation: prevValue=20 (index=1), fraction=2.1-2=0.1 -> 20 + 0.1*(30-20) = 21
-        List<TimeSeries> group1P70List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "70.0"));
+        List<TimeSeries> group1P70List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "70"));
         assertEquals(1, group1P70List.size());
         assertSamplesEqual(
             "Group1 P70",
@@ -542,7 +551,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         // 90th percentile: fractionalRank=0.9*3=2.7, ceil=3, rankAsInt=3, index=2 -> 30
         // Interpolation: prevValue=20 (index=1), fraction=2.7-2=0.7 -> 20 + 0.7*(30-20) = 27
-        List<TimeSeries> group1P90List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "90.0"));
+        List<TimeSeries> group1P90List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "90"));
         assertEquals(1, group1P90List.size());
         assertSamplesEqual(
             "Group1 P90",
@@ -552,7 +561,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         // 100th percentile: fractionalRank=1.0*3=3.0, ceil=3, rankAsInt=3, index=2 -> 30
         // Interpolation: prevValue=20 (index=1), fraction=3.0-2=1.0 -> 20 + 1.0*(30-20) = 30
-        List<TimeSeries> group1P100List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "100.0"));
+        List<TimeSeries> group1P100List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "prod", "_percentile", "100"));
         assertEquals(1, group1P100List.size());
         assertSamplesEqual(
             "Group1 P100",
@@ -563,7 +572,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         // ========== Group 2: region=us-west, env=dev (values: [40,50]) ==========
 
         // 0th percentile: fractionalRank=0.0*2=0.0, ceil=0, rankAsInt=0, <=1 -> first element
-        List<TimeSeries> group2P0List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "0.0"));
+        List<TimeSeries> group2P0List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "0"));
         assertEquals(1, group2P0List.size());
         assertSamplesEqual(
             "Group2 P0",
@@ -572,7 +581,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         );
 
         // 30th percentile: fractionalRank=0.3*2=0.6, ceil=1, rankAsInt=1, <=1 -> first element
-        List<TimeSeries> group2P30List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "30.0"));
+        List<TimeSeries> group2P30List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "30"));
         assertEquals(1, group2P30List.size());
         assertSamplesEqual(
             "Group2 P30",
@@ -581,7 +590,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         );
 
         // 50th percentile: fractionalRank=0.5*2=1.0, ceil=1, rankAsInt=1, <=1 -> first element
-        List<TimeSeries> group2P50List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "50.0"));
+        List<TimeSeries> group2P50List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "50"));
         assertEquals(1, group2P50List.size());
         assertSamplesEqual(
             "Group2 P50",
@@ -591,7 +600,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         // 70th percentile: fractionalRank=0.7*2=1.4, ceil=2, rankAsInt=2, index=1 -> 50
         // Interpolation: prevValue=40 (index=0), fraction=1.4-1=0.4 -> 40 + 0.4*(50-40) = 44
-        List<TimeSeries> group2P70List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "70.0"));
+        List<TimeSeries> group2P70List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "70"));
         assertEquals(1, group2P70List.size());
         assertSamplesEqual(
             "Group2 P70",
@@ -601,7 +610,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         // 90th percentile: fractionalRank=0.9*2=1.8, ceil=2, rankAsInt=2, index=1 -> 50
         // Interpolation: prevValue=40 (index=0), fraction=1.8-1=0.8 -> 40 + 0.8*(50-40) = 48
-        List<TimeSeries> group2P90List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "90.0"));
+        List<TimeSeries> group2P90List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "90"));
         assertEquals(1, group2P90List.size());
         assertSamplesEqual(
             "Group2 P90",
@@ -611,7 +620,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         // 100th percentile: fractionalRank=1.0*2=2.0, ceil=2, rankAsInt=2, index=1 -> 50
         // Interpolation: prevValue=40 (index=0), fraction=2.0-1=1.0 -> 40 + 1.0*(50-40) = 50
-        List<TimeSeries> group2P100List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "100.0"));
+        List<TimeSeries> group2P100List = findSeriesWithLabels(result, Map.of("region", "us-west", "env", "dev", "_percentile", "100"));
         assertEquals(1, group2P100List.size());
         assertSamplesEqual(
             "Group2 P100",
@@ -622,7 +631,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         // ========== Group 3: region=us-east, env=prod (values: [5,15,25]) ==========
 
         // 0th percentile: fractionalRank=0.0*3=0.0, ceil=0, rankAsInt=0, <=1 -> first element
-        List<TimeSeries> group3P0List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "0.0"));
+        List<TimeSeries> group3P0List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "0"));
         assertEquals(1, group3P0List.size());
         assertSamplesEqual(
             "Group3 P0",
@@ -631,7 +640,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         );
 
         // 30th percentile: fractionalRank=0.3*3=0.9, ceil=1, rankAsInt=1, <=1 -> first element
-        List<TimeSeries> group3P30List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "30.0"));
+        List<TimeSeries> group3P30List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "30"));
         assertEquals(1, group3P30List.size());
         assertSamplesEqual(
             "Group3 P30",
@@ -641,7 +650,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         // 50th percentile: fractionalRank=0.5*3=1.5, ceil=2, rankAsInt=2, index=1 -> 15
         // Interpolation: prevValue=5 (index=0), fraction=1.5-1=0.5 -> 5 + 0.5*(15-5) = 10
-        List<TimeSeries> group3P50List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "50.0"));
+        List<TimeSeries> group3P50List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "50"));
         assertEquals(1, group3P50List.size());
         assertSamplesEqual(
             "Group3 P50",
@@ -651,7 +660,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         // 70th percentile: fractionalRank=0.7*3=2.1, ceil=3, rankAsInt=3, index=2 -> 25
         // Interpolation: prevValue=15 (index=1), fraction=2.1-2=0.1 -> 15 + 0.1*(25-15) = 16
-        List<TimeSeries> group3P70List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "70.0"));
+        List<TimeSeries> group3P70List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "70"));
         assertEquals(1, group3P70List.size());
         assertSamplesEqual(
             "Group3 P70",
@@ -661,7 +670,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         // 90th percentile: fractionalRank=0.9*3=2.7, ceil=3, rankAsInt=3, index=2 -> 25
         // Interpolation: prevValue=15 (index=1), fraction=2.7-2=0.7 -> 15 + 0.7*(25-15) = 22
-        List<TimeSeries> group3P90List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "90.0"));
+        List<TimeSeries> group3P90List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "90"));
         assertEquals(1, group3P90List.size());
         assertSamplesEqual(
             "Group3 P90",
@@ -671,7 +680,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         // 100th percentile: fractionalRank=1.0*3=3.0, ceil=3, rankAsInt=3, index=2 -> 25
         // Interpolation: prevValue=15 (index=1), fraction=3.0-2=1.0 -> 15 + 1.0*(25-15) = 25
-        List<TimeSeries> group3P100List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "100.0"));
+        List<TimeSeries> group3P100List = findSeriesWithLabels(result, Map.of("region", "us-east", "env", "prod", "_percentile", "100"));
         assertEquals(1, group3P100List.size());
         assertSamplesEqual(
             "Group3 P100",

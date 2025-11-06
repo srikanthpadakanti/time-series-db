@@ -355,3 +355,15 @@ test_case:
       expected:
         status: "success"
         data: []
+    - name: "maxSeries baseline with asPercent and percentileOfSeries"
+      type: "m3ql"
+      query: "a = fetch method:{GET,POST} | maxSeries; fetch method:{GET,POST}| asPercent(a) | percentileOfSeries 80 false"
+      time_config:
+        min_timestamp: "2025-01-01T02:00:00Z"
+        max_timestamp: "2025-01-01T03:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: { _percentile: "80" }
+            values: [10.0, 100.0, 70.58823529411765, 100.0, 76.92307692307693, 66.66666666666666, 66.66666666666666, 100.0, 100.0, 71.42857142857143, 100.0, 83.33333333333334]

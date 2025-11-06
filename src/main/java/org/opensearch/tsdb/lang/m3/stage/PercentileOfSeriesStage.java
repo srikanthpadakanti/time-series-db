@@ -352,7 +352,7 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
 
             // Add _percentile label to distinguish this series
             Map<String, String> labelMap = new HashMap<>(aggregatedSeries.getLabels().toMapView());
-            labelMap.put(PERCENTILE_LABEL, String.valueOf(percentile));
+            labelMap.put(PERCENTILE_LABEL, formatPercentile(percentile));
             Labels percentileLabels = ByteLabels.fromMap(labelMap);
 
             result.add(
@@ -368,6 +368,22 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
         }
 
         return result;
+    }
+
+    /**
+     * Format percentile value for label.
+     * Removes unnecessary decimal points (e.g., "99.0" becomes "99", but "99.5" stays "99.5").
+     *
+     * @param percentile The percentile value to format
+     * @return Formatted string representation
+     */
+    private static String formatPercentile(Float percentile) {
+        // If it's a whole number, return without decimal point
+        if (percentile == percentile.intValue()) {
+            return String.valueOf(percentile.intValue());
+        }
+        // Otherwise, return with decimals (stripping trailing zeros)
+        return String.valueOf(percentile).replaceAll("\\.?0+$", "");
     }
 
     @Override

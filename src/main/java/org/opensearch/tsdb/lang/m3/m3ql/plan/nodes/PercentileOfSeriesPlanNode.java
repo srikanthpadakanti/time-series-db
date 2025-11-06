@@ -191,9 +191,8 @@ public class PercentileOfSeriesPlanNode extends M3PlanNode {
         }
 
         // Remaining arguments: tags (optional)
-        List<String> tags = null;
+        List<String> tags = new ArrayList<>();
         if (argIndex < children.size()) {
-            tags = new ArrayList<>();
             for (int i = argIndex; i < children.size(); i++) {
                 if (children.get(i) instanceof ValueNode node) {
                     tags.add(Utils.stripDoubleQuotes(node.getValue()));
