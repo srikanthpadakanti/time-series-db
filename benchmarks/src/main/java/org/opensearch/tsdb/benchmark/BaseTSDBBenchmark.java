@@ -122,7 +122,11 @@ public abstract class BaseTSDBBenchmark {
         tempDir = Files.createTempDirectory("jmh-tsdb-benchmark");
         // Set up index with ClosedChunkIndex only
         maxTs = MIN_TS * sampleCount;
-        closedChunkIndex = new ClosedChunkIndex(tempDir, new ClosedChunkIndex.Metadata(tempDir.getFileName().toString(), 0, 0), TimeUnit.MILLISECONDS);
+        closedChunkIndex = new ClosedChunkIndex(
+            tempDir,
+            new ClosedChunkIndex.Metadata(tempDir.getFileName().toString(), 0, 0),
+            TimeUnit.MILLISECONDS
+        );
         indexTimeSeries(closedChunkIndex, cardinality, sampleCount, labelCount);
         closedChunkIndex.commitWithMetadata(List.of());
         closedChunkIndex.getDirectoryReaderManager().maybeRefresh();
@@ -349,11 +353,13 @@ public abstract class BaseTSDBBenchmark {
     protected IndexSettings createIndexSettings() {
         return new IndexSettings(
             IndexMetadata.builder("_index")
-                .settings(Settings.builder()
+                .settings(
+                    Settings.builder()
                         .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
                         .put("index.tsdb_engine.enabled", true)
                         .put("index.queries.cache.enabled", false)
-                        .put("index.requests.cache.enable", false))
+                        .put("index.requests.cache.enable", false)
+                )
                 .numberOfShards(1)
                 .numberOfReplicas(0)
                 .creationDate(System.currentTimeMillis())
