@@ -42,11 +42,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Base framework for time series testing
- * Extends OpenSearch's integration test infrastructure
+ * Base framework for time series integration testing.
+ * Provides YAML-driven test configuration for TSDB engine validation.
  *
- * <p>This framework uses TSDBDocument format for ingestion to minimize duplication with TSDBEngine.
- * The TSDBDocument format is:
+ * <h2>Document Format</h2>
+ * <p>Uses TSDBDocument format to align with production data flow:
  * <pre>
  * {
  *   "labels": "name http_requests method GET status 200",  // space-separated key-value pairs
@@ -62,25 +62,32 @@ import java.util.Map;
  * it matches the actual TSDB engine mapping.
  *
  * <h2>Cluster Configuration</h2>
- * <p>This framework uses YAML-driven cluster creation. The {@code @ClusterScope} annotation is configured
- * to allow dynamic node creation based on YAML configuration:
- * <ul>
- *   <li>{@code scope=TEST} - Fresh cluster for each test method (ensures isolation)</li>
- *   <li>{@code numDataNodes=0} - No nodes started by default (framework starts them from YAML)</li>
- * </ul>
- *
- * <p>Specify the number of nodes in your YAML file:
+ * <p>Supports dynamic cluster creation via YAML:
  * <pre>{@code
- * cluster_config:
- *   nodes: 3  # Framework will start 3 data nodes
+ * test_setup:
+ *   cluster_config:
+ *     nodes: 3
+ *   index_configs:
+ *     - name: "my_index"
+ *       shards: 3
+ *       replicas: 1
  * }</pre>
+ *
+ * <h2>Usage</h2>
+ * <pre>{@code
+ * public void testMyScenario() throws Exception {
+ *     loadTestConfigurationFromFile("test_cases/my_test.yaml");
+ *     runBasicTest();
+ * }
+ * }</pre>
+ *
+ * @see YamlLoader
+ * @see SearchQueryExecutor
  */
 @SuppressWarnings("unchecked")
 @OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0, supportsDedicatedMasters = false, autoManageMasterNodes = true)
 public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
 
-    // Default index settings as YAML constant
-    // Note: Mapping is obtained directly from Constants.Mapping.DEFAULT_INDEX_MAPPING
     private static final String DEFAULT_INDEX_SETTINGS_YAML = """
         index.refresh_interval: "1s"
         index.tsdb_engine.enabled: true
@@ -96,8 +103,6 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
     @Override
     public void setUp() throws Exception {
         super.setUp();
-        // Note: Test methods should call loadTestConfigurationFromFile() before running tests
-        // This allows different test methods to use different YAML configurations
     }
 
     /**
@@ -116,13 +121,8 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
         clearIndexIfExists();
     }
 
-    /**
-     * Starts cluster nodes based on the cluster configuration from YAML.
-     * If cluster_config.nodes is specified, starts that many nodes.
-     * Otherwise, starts a single node by default.
-     */
     private void startClusterNodes() throws Exception {
-        int nodesToStart = 1; // default
+        int nodesToStart = 1;
 
         if (testSetup != null && testSetup.clusterConfig() != null) {
             nodesToStart = testSetup.clusterConfig().getNodes();
@@ -130,7 +130,6 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
 
         if (nodesToStart > 0) {
             internalCluster().startNodes(nodesToStart);
-            // Ensure cluster has formed with all nodes
             ensureStableCluster(nodesToStart);
         }
     }
@@ -199,7 +198,8 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
             createTimeSeriesIndex(indexConfig);
         }
 
-        // Ingest data into respective indices
+        ensureGreen();
+
         if (testCase.inputDataList() != null && !testCase.inputDataList().isEmpty()) {
             for (InputDataConfig inputDataConfig : testCase.inputDataList()) {
                 List<TimeSeriesSample> samples = TimeSeriesSampleGenerator.generateSamples(inputDataConfig);
@@ -207,9 +207,7 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
             }
         }
 
-        // Ensure all indices are green and refreshed
         for (IndexConfig indexConfig : indexConfigs) {
-            ensureGreen(indexConfig.name());
             refresh(indexConfig.name());
         }
     }
@@ -223,7 +221,6 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
             String indexName = indexConfig.name();
             if (client().admin().indices().prepareExists(indexName).get().isExists()) {
                 client().admin().indices().prepareDelete(indexName).get();
-                // Wait for the index to be fully deleted
                 assertBusy(
                     () -> { assertFalse("Index should be deleted", client().admin().indices().prepareExists(indexName).get().isExists()); }
                 );
@@ -238,7 +235,6 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
         allSettings.put("index.number_of_replicas", indexConfig.replicas());
 
         Settings settings = Settings.builder().loadFromMap(allSettings).build();
-
         Map<String, Object> mappingConfig = indexConfig.mapping();
 
         client().admin().indices().prepareCreate(indexConfig.name()).setSettings(settings).setMapping(mappingConfig).get();
@@ -266,7 +262,6 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
      * @throws Exception if ingestion fails
      */
     protected void ingestSamples(List<TimeSeriesSample> samples, String indexName) throws Exception {
-        // Use bulk request for better performance, but still one document per sample
         BulkRequest bulkRequest = new BulkRequest();
 
         // Send one document per sample to match production data shape
@@ -320,11 +315,9 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
     }
 
     /**
-     * Validates that shards are properly distributed across nodes.
-     * Useful for verifying multi-shard and multi-node test configurations.
+     * Validates shard distribution across cluster nodes.
      *
-     * @param indexConfig The index configuration to validate
-     * @throws AssertionError if shard distribution is invalid
+     * @param indexConfig The index configuration
      */
     protected void validateShardDistribution(IndexConfig indexConfig) {
         String indexName = indexConfig.name();
@@ -354,29 +347,24 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
     }
 
     /**
-     * Gets statistics about document distribution across shards.
-     * Useful for verifying that data is actually distributed across all shards.
+     * Returns document count per shard.
      *
-     * @param indexConfig The index configuration to get stats for
-     * @return Map from shard ID to document count on that shard
+     * @param indexConfig The index configuration
+     * @return Map of shard ID to document count
      */
     protected Map<Integer, Long> getShardDocumentCounts(IndexConfig indexConfig) throws Exception {
         String indexName = indexConfig.name();
         Map<Integer, Long> shardCounts = new HashMap<>();
 
-        // Get stats for the index
         IndicesStatsResponse statsResponse = client().admin().indices().prepareStats(indexName).clear().setDocs(true).get();
-
         IndexStats indexStats = statsResponse.getIndex(indexName);
+
         if (indexStats == null) {
             return shardCounts;
         }
 
-        // Iterate through all shard stats and get primary shard document counts
         for (IndexShardStats shardStats : indexStats.getIndexShards().values()) {
             int shardId = shardStats.getShardId().id();
-
-            // Get primary shard stats
             for (ShardStats shard : shardStats.getShards()) {
                 if (shard.getShardRouting().primary()) {
                     long docCount = shard.getStats().getDocs().getCount();
@@ -390,12 +378,10 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
     }
 
     /**
-     * Validates that data is distributed across all shards.
-     * This ensures that your test data actually uses all available shards.
+     * Validates minimum document count per shard.
      *
-     * @param indexConfig The index configuration to validate
-     * @param minDocsPerShard Minimum number of documents expected per shard (use 1 to ensure all shards have data)
-     * @throws AssertionError if any shard has fewer than minDocsPerShard documents
+     * @param indexConfig The index configuration
+     * @param minDocsPerShard Minimum documents per shard
      */
     protected void validateDataDistribution(IndexConfig indexConfig, int minDocsPerShard) throws Exception {
         Map<Integer, Long> shardCounts = getShardDocumentCounts(indexConfig);
@@ -411,11 +397,9 @@ public abstract class TimeSeriesTestFramework extends OpenSearchIntegTestCase {
     }
 
     /**
-     * Validates that ALL shards have at least some data.
-     * Convenience method that calls validateDataDistribution(1).
+     * Validates that all shards contain at least one document.
      *
-     * @param indexConfig The index configuration to validate
-     * @throws AssertionError if any shard is empty
+     * @param indexConfig The index configuration
      */
     protected void validateAllShardsHaveData(IndexConfig indexConfig) throws Exception {
         validateDataDistribution(indexConfig, 1);
