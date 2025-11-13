@@ -58,7 +58,8 @@ public class M3OSTranslator {
         planRoot = M3PlanOptimizer.optimize(planRoot);
 
         // 4. Convert to SearchSourceBuilder
-        return new SourceBuilderVisitor(params).process(planRoot).toSearchSourceBuilder().profile(params.profile());
+        // turn off track_total_hits as we don't need it for TSDB queries and it can take up a lot of CPU time
+        return new SourceBuilderVisitor(params).process(planRoot).toSearchSourceBuilder().profile(params.profile()).trackTotalHits(false);
     }
 
     /**

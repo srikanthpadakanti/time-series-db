@@ -1,5 +1,6 @@
 {
   "size" : 0,
+  "track_total_hits": -1,
   "query" : {
     "bool" : {
       "filter" : [
