@@ -192,7 +192,7 @@ public class Head {
      * Closes all MemChunks in the head that will not have new samples added.
      *
      * @param allowDropEmptySeries whether to allow dropping empty series after closing chunks
-     * @return the minimum sequence number of all in-memory samples after closing chunks, or -1 if all in-memory chunks are closed
+     * @return the minimum sequence number of all in-memory samples after closing chunks, or Long.MAX_VALUE if all in-memory chunks are closed
      */
     public long closeHeadChunks(boolean allowDropEmptySeries) {
         List<MemSeries> allSeries = getSeriesMap().getSeriesMap();
@@ -200,8 +200,8 @@ public class Head {
 
         // translog replays starts from LOCAL_CHECKPOINT_KEY + 1, since it expects the local checkpoint to be the last processed seq no
         // the minSeqNo computed here is the minimum sequence number of all in-memory samples, therefore we must replay it (subtract one).
-        // If the minSeqNo is Long.MAX_VALUE indicating all chunks are closed, return -1.
-        long minSeqNoToKeep = indexChunksResult.minSeqNo() == Long.MAX_VALUE ? -1 : indexChunksResult.minSeqNo() - 1;
+        // If the minSeqNo is Long.MAX_VALUE indicating all chunks are closed, return Long.MAX_VALUE.
+        long minSeqNoToKeep = indexChunksResult.minSeqNo() == Long.MAX_VALUE ? Long.MAX_VALUE : indexChunksResult.minSeqNo() - 1;
 
         closedChunkIndexManager.commitChangedIndexes(allSeries);
         dropClosedChunks(indexChunksResult.seriesToClosedChunks());
@@ -212,9 +212,9 @@ public class Head {
         }
 
         // TODO: delegate removal to ReferenceManager
-        // If minSeqNoToKeep is -1 indicating either no series or all chunks are closed, skip dropping empty series.
+        // If minSeqNoToKeep is Long.MAX_VALUE indicating either no series or all chunks are closed, skip dropping empty series.
         // They will be dropped in the next cycle if still empty.
-        if (allowDropEmptySeries && minSeqNoToKeep != -1) {
+        if (allowDropEmptySeries && minSeqNoToKeep != Long.MAX_VALUE) {
             // drop all series with sequence number smaller than the minimum sequence number retained in memory
             dropEmptySeries(indexChunksResult.minSeqNo());
         }

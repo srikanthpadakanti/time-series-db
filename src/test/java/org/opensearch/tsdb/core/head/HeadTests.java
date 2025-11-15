@@ -204,7 +204,7 @@ public class HeadTests extends OpenSearchTestCase {
 
         // Simulate advancing the time, so the series with data may have it's last chunk closed
         head.updateMaxSeenTimestamp(TEST_CHUNK_EXPIRY.getMillis() + 1000L);
-        assertEquals(-1, head.closeHeadChunks(true));
+        assertEquals(Long.MAX_VALUE, head.closeHeadChunks(true));
 
         head.close();
         closedChunkIndexManager.close();
