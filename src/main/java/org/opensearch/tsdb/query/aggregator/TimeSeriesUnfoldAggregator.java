@@ -159,8 +159,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
         // Calculate theoretical maximum aligned timestamp
         // This is the largest timestamp aligned to (minTimestamp + N * step) that is < maxTimestamp
-        // Formula: (maxTimestamp - 1 - minTimestamp) / step * step + minTimestamp
-        this.theoreticalMaxTimestamp = (maxTimestamp - 1 - minTimestamp) / step * step + minTimestamp;
+        this.theoreticalMaxTimestamp = TimeSeries.calculateAlignedMaxTimestamp(minTimestamp, maxTimestamp, step);
     }
 
     @Override

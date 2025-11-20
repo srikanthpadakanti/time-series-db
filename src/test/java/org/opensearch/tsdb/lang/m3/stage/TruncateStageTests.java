@@ -32,7 +32,7 @@ public class TruncateStageTests extends AbstractWireSerializingTestCase<Truncate
     @Override
     protected TruncateStage createTestInstance() {
         long min = randomLongBetween(0, 1000);
-        long max = randomLongBetween(min, 2000);
+        long max = randomLongBetween(min + 1, 2000);
         return new TruncateStage(min, max);
     }
 
@@ -52,6 +52,7 @@ public class TruncateStageTests extends AbstractWireSerializingTestCase<Truncate
     /**
      * Test truncating with both minTimestamp and maxTimestamp.
      * Tests dense, sparse (missing data at boundaries), and empty series.
+     * Note: maxTimestamp is exclusive, so [20, 50) excludes 50.
      */
     public void testTruncate() {
         TruncateStage stage = new TruncateStage(20L, 50L);
@@ -91,24 +92,25 @@ public class TruncateStageTests extends AbstractWireSerializingTestCase<Truncate
 
         assertEquals(3, result.size());
 
-        // Dense: keep samples in [20, 50]
+        // Dense: keep samples in [20, 50) - excludes 50
         TimeSeries denseResult = findSeriesByLabel(result, "type", "dense");
-        List<Sample> expectedDense = List.of(
-            new FloatSample(20L, 3.0),
-            new FloatSample(30L, 4.0),
-            new FloatSample(40L, 5.0),
-            new FloatSample(50L, 6.0)
-        );
+        List<Sample> expectedDense = List.of(new FloatSample(20L, 3.0), new FloatSample(30L, 4.0), new FloatSample(40L, 5.0));
         assertSamplesEqual("Both Dense", expectedDense, denseResult.getSamples());
+        assertEquals("Truncated minTimestamp should be 20", 20L, denseResult.getMinTimestamp());
+        assertEquals("Truncated maxTimestamp should be 40 (largest aligned < 50)", 40L, denseResult.getMaxTimestamp());
 
-        // Sparse: keep samples in [20, 50] (20 and 50 missing, only 30 and 40)
+        // Sparse: keep samples in [20, 50) (20 and 50 missing, only 30 and 40)
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
         List<Sample> expectedSparse = List.of(new FloatSample(30L, 4.0), new FloatSample(40L, 5.0));
         assertSamplesEqual("Both Sparse", expectedSparse, sparseResult.getSamples());
+        assertEquals("Truncated minTimestamp should be 20", 20L, sparseResult.getMinTimestamp());
+        assertEquals("Truncated maxTimestamp should be 40 (largest aligned < 50)", 40L, sparseResult.getMaxTimestamp());
 
         // Empty: no samples
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");
         assertEquals(0, emptyResult.getSamples().size());
+        assertEquals("Truncated minTimestamp should be 20", 20L, emptyResult.getMinTimestamp());
+        assertEquals("Truncated maxTimestamp should be 40 (largest aligned < 50)", 40L, emptyResult.getMaxTimestamp());
     }
 
     /**
@@ -134,20 +136,24 @@ public class TruncateStageTests extends AbstractWireSerializingTestCase<Truncate
         assertEquals(1, result.size());
         TimeSeries resultTs = result.get(0);
 
-        // Should return empty time series with preserved metadata
+        // Should return empty time series with truncated time bounds
         assertEquals(0, resultTs.getSamples().size());
         assertEquals(labels, resultTs.getLabels());
-        assertEquals(0L, resultTs.getMinTimestamp());
-        assertEquals(30L, resultTs.getMaxTimestamp());
+        assertEquals(100L, resultTs.getMinTimestamp()); // Truncation start
+        assertEquals(190L, resultTs.getMaxTimestamp()); // Largest aligned < 200 with step=10
         assertEquals(10L, resultTs.getStep());
     }
 
     /**
-     * Test that constructor throws when minTimestamp > maxTimestamp.
+     * Test that constructor throws when minTimestamp >= maxTimestamp.
      */
-    public void testTruncateWithMinGreaterThanMax() {
+    public void testTruncateWithMinGreaterThanOrEqualToMax() {
         IllegalArgumentException ex = expectThrows(IllegalArgumentException.class, () -> { new TruncateStage(50L, 20L); });
-        assertTrue(ex.getMessage().contains("must be <="));
+        assertTrue(ex.getMessage().contains("must be <"));
+
+        // Also test when min equals max
+        IllegalArgumentException ex2 = expectThrows(IllegalArgumentException.class, () -> { new TruncateStage(50L, 50L); });
+        assertTrue(ex2.getMessage().contains("must be <"));
     }
 
     /**
@@ -170,7 +176,7 @@ public class TruncateStageTests extends AbstractWireSerializingTestCase<Truncate
             builder.endObject();
 
             String json = builder.toString();
-            assertEquals("{\"min_timestamp\":10,\"max_timestamp\":50}", json);
+            assertEquals("{\"truncate_start\":10,\"truncate_end\":50}", json);
         }
     }
 
@@ -178,28 +184,28 @@ public class TruncateStageTests extends AbstractWireSerializingTestCase<Truncate
      * Test fromArgs method.
      */
     public void testFromArgs() {
-        TruncateStage stage = TruncateStage.fromArgs(java.util.Map.of("min_timestamp", 10L, "max_timestamp", 50L));
+        TruncateStage stage = TruncateStage.fromArgs(java.util.Map.of("truncate_start", 10L, "truncate_end", 50L));
         assertEquals(new TruncateStage(10L, 50L), stage);
     }
 
     /**
-     * Test fromArgs throws when min_timestamp is missing.
+     * Test fromArgs throws when truncate_start is missing.
      */
-    public void testFromArgsMissingMin() {
+    public void testFromArgsMissingStart() {
         IllegalArgumentException ex = expectThrows(
             IllegalArgumentException.class,
-            () -> TruncateStage.fromArgs(java.util.Map.of("max_timestamp", 50L))
+            () -> TruncateStage.fromArgs(java.util.Map.of("truncate_end", 50L))
         );
         assertTrue(ex.getMessage().contains("requires both"));
     }
 
     /**
-     * Test fromArgs throws when max_timestamp is missing.
+     * Test fromArgs throws when truncate_end is missing.
      */
-    public void testFromArgsMissingMax() {
+    public void testFromArgsMissingEnd() {
         IllegalArgumentException ex = expectThrows(
             IllegalArgumentException.class,
-            () -> TruncateStage.fromArgs(java.util.Map.of("min_timestamp", 10L))
+            () -> TruncateStage.fromArgs(java.util.Map.of("truncate_start", 10L))
         );
         assertTrue(ex.getMessage().contains("requires both"));
     }

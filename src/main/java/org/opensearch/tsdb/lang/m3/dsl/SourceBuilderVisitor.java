@@ -306,6 +306,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         // Create FallbackSeriesUnaryStage with query metadata (time range and step)
         // Note: The step size uses FALLBACK_SERIES_STEP_MS for consistent granularity
         TimeRange timeRange = getAdjustedFetchTimeRange();
+
         FallbackSeriesUnaryStage fallbackStage = new FallbackSeriesUnaryStage(
             planNode.getConstantValue(),
             timeRange.start(),

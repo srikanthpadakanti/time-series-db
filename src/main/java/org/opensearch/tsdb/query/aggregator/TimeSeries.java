@@ -30,6 +30,15 @@ import java.util.Objects;
  *   <li><strong>Efficient Labels:</strong> Uses Labels objects for efficient label handling</li>
  * </ul>
  *
+ * <h2>Time Range Semantics:</h2>
+ * <p>The {@code minTimestamp} and {@code maxTimestamp} fields define the time range boundaries
+ * (both inclusive) for this time series. These represent the conceptual start and end of the
+ * time series, <strong>not necessarily the actual timestamps present in the samples list</strong>.</p>
+ *
+ * <p>The samples list may be sparse and not contain values at every timestamp in the
+ * [minTimestamp, maxTimestamp] range due to null or missing samples. Clients are responsible
+ * for filling with null samples if a dense representation is required.</p>
+ *
  * <h3>Usage Examples:</h3>
  * <pre>{@code
  * // Create time series with Labels object
@@ -38,7 +47,8 @@ import java.util.Objects;
  *     new FloatSample(1000L, 1.0f),
  *     new FloatSample(2000L, 2.0f)
  * );
- * TimeSeries series = new TimeSeries(samples, labels, 1000L, 2000L, 1000L, "api-metrics");
+ * // Time range is [1000, 3000] but samples only exist at 1000 and 2000
+ * TimeSeries series = new TimeSeries(samples, labels, 1000L, 3000L, 1000L, "api-metrics");
  * }</pre>
  *
  * <h3>Performance Considerations:</h3>
@@ -53,8 +63,8 @@ public class TimeSeries {
     private String alias; // Optional alias name for renamed series
 
     // Time series metadata
-    private final long minTimestamp; // Minimum timestamp for this time series
-    private final long maxTimestamp; // Maximum timestamp for this time series
+    private final long minTimestamp; // Minimum timestamp boundary (inclusive) - defines the start of time range
+    private final long maxTimestamp; // Maximum timestamp boundary (inclusive) - defines the end of time range
     private final long step; // Step size between samples
 
     // TODO: add copy constructor utils, currently every stage is mutating/copying
@@ -65,12 +75,16 @@ public class TimeSeries {
     /**
      * Constructor for creating a TimeSeries with all parameters.
      *
-     * @param samples List of time series samples
+     * @param samples List of time series samples (may contain null/missing samples at some timestamps)
      * @param labels Labels associated with this time series
-     * @param minTimestamp Minimum timestamp in the time series
-     * @param maxTimestamp Maximum timestamp in the time series
+     * @param minTimestamp Minimum timestamp boundary (inclusive) - defines the start of the time range
+     * @param maxTimestamp Maximum timestamp boundary (inclusive) - defines the end of the time range
      * @param step Step size between samples
      * @param alias Optional alias name for the time series (can be null)
+     *
+     * <p>Note: minTimestamp and maxTimestamp define the time range boundaries [minTimestamp, maxTimestamp].
+     * The actual samples list may not contain values at these exact timestamps due to null/missing samples.
+     * Clients should fill with null samples if dense representation is required.</p>
      */
     public TimeSeries(List<Sample> samples, Labels labels, long minTimestamp, long maxTimestamp, long step, String alias) {
         this.samples = samples;
@@ -127,18 +141,22 @@ public class TimeSeries {
     }
 
     /**
-     * Get the minimum timestamp in this time series.
+     * Get the minimum timestamp boundary for this time series (inclusive).
+     * This defines the start of the time range, not necessarily the timestamp of the first sample.
+     * The actual samples list may not contain a value at this exact timestamp due to null/missing samples.
      *
-     * @return The minimum timestamp
+     * @return The minimum timestamp boundary (inclusive)
      */
     public long getMinTimestamp() {
         return minTimestamp;
     }
 
     /**
-     * Get the maximum timestamp in this time series.
+     * Get the maximum timestamp boundary for this time series (inclusive).
+     * This defines the end of the time range, not necessarily the timestamp of the last sample.
+     * The actual samples list may not contain a value at this exact timestamp due to null/missing samples.
      *
-     * @return The maximum timestamp
+     * @return The maximum timestamp boundary (inclusive)
      */
     public long getMaxTimestamp() {
         return maxTimestamp;
@@ -151,6 +169,36 @@ public class TimeSeries {
      */
     public long getStep() {
         return step;
+    }
+
+    /**
+     * Calculate the maximal timestamp aligned to step boundary within a query range.
+     * Given a query range [queryStart, queryEnd) where queryEnd is exclusive, this method
+     * returns the largest timestamp that satisfies:
+     * <ul>
+     *   <li>timestamp = queryStart + N * step for some non-negative integer N</li>
+     *   <li>timestamp &lt; queryEnd (strictly less than, since queryEnd is exclusive)</li>
+     * </ul>
+     *
+     * <p>This is useful for generating time series data that aligns with query boundaries
+     * while respecting the exclusive end semantics.</p>
+     *
+     * @param queryStart The start of the query range (inclusive)
+     * @param queryEnd The end of the query range (exclusive)
+     * @param step The step size between samples
+     * @return The maximal aligned timestamp within the range, or queryStart if no valid timestamp exists
+     * @throws IllegalArgumentException if step &lt;= 0 or queryEnd &lt;= queryStart
+     */
+    public static long calculateAlignedMaxTimestamp(long queryStart, long queryEnd, long step) {
+        if (step <= 0) {
+            throw new IllegalArgumentException("Step must be positive, got: " + step);
+        }
+        if (queryEnd <= queryStart) {
+            throw new IllegalArgumentException("Query end must be greater than query start, got start=" + queryStart + ", end=" + queryEnd);
+        }
+
+        // Find maximal timestamp: largest value = queryStart + N * step where result < queryEnd
+        return queryStart + ((queryEnd - queryStart - 1) / step) * step;
     }
 
     @Override

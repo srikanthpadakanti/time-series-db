@@ -27,7 +27,7 @@ import java.util.Objects;
 
 /**
  * Pipeline stage that truncates time series to only include samples within a specified time range.
- * Supports optional minimum and/or maximum timestamp bounds.
+ * The time range is [minTimestamp, maxTimestamp) where minTimestamp is inclusive and maxTimestamp is exclusive.
  * Uses binary search for efficient index lookup.
  */
 @PipelineStageAnnotation(name = "truncate")
@@ -35,21 +35,21 @@ public class TruncateStage implements UnaryPipelineStage {
     /** The name of this stage. */
     public static final String NAME = "truncate";
 
-    private final long minTimestamp;
-    private final long maxTimestamp;
+    private final long truncateStart;
+    private final long truncateEnd;
 
     /**
      * Creates a truncate stage with the specified time bounds.
      *
-     * @param minTimestamp the minimum timestamp (inclusive)
-     * @param maxTimestamp the maximum timestamp (inclusive)
+     * @param truncateStart the truncation start timestamp (inclusive)
+     * @param truncateEnd the truncation end timestamp (exclusive)
      */
-    public TruncateStage(long minTimestamp, long maxTimestamp) {
-        if (minTimestamp > maxTimestamp) {
-            throw new IllegalArgumentException("minTimestamp must be <= maxTimestamp");
+    public TruncateStage(long truncateStart, long truncateEnd) {
+        if (truncateStart >= truncateEnd) {
+            throw new IllegalArgumentException("truncateStart must be < truncateEnd");
         }
-        this.minTimestamp = minTimestamp;
-        this.maxTimestamp = maxTimestamp;
+        this.truncateStart = truncateStart;
+        this.truncateEnd = truncateEnd;
     }
 
     @Override
@@ -65,40 +65,47 @@ public class TruncateStage implements UnaryPipelineStage {
 
         for (TimeSeries ts : input) {
             List<Sample> samples = ts.getSamples();
+
+            // Calculate the new time range for the truncated series
+            // newMinTimestamp: smallest value of form (original_min + N * step) that is >= truncateStart
+            // newMaxTimestamp: largest value of form (newMinTimestamp + M * step) that is < truncateEnd
+            long originalMin = ts.getMinTimestamp();
+            long step = ts.getStep();
+
+            // Find the smallest aligned timestamp >= truncateStart
+            long newMinTimestamp;
+            if (truncateStart <= originalMin) {
+                newMinTimestamp = originalMin;
+            } else {
+                // Calculate how many steps from originalMin to reach or exceed truncateStart
+                long stepsNeeded = (truncateStart - originalMin + step - 1) / step;
+                newMinTimestamp = originalMin + stepsNeeded * step;
+            }
+
+            // Find the largest aligned timestamp < truncateEnd
+            long newMaxTimestamp = TimeSeries.calculateAlignedMaxTimestamp(newMinTimestamp, truncateEnd, step);
+
             if (samples.isEmpty()) {
-                result.add(ts);
+                // Empty sample list: return empty time series with truncated time bounds
+                result.add(
+                    new TimeSeries(new ArrayList<>(), ts.getLabels(), newMinTimestamp, newMaxTimestamp, ts.getStep(), ts.getAlias())
+                );
                 continue;
             }
 
             // Find the start and end indices using binary search
-            int startIndex = findStartIndex(samples, minTimestamp);
-            int endIndex = findEndIndex(samples, maxTimestamp);
+            int startIndex = findStartIndex(samples, truncateStart);
+            int endIndex = findEndIndex(samples, truncateEnd);
 
             if (startIndex > endIndex) {
-                // No samples in range, return empty time series
+                // No samples in range, return empty time series with truncated time bounds
                 result.add(
-                    new TimeSeries(
-                        new ArrayList<>(),
-                        ts.getLabels(),
-                        ts.getMinTimestamp(),
-                        ts.getMaxTimestamp(),
-                        ts.getStep(),
-                        ts.getAlias()
-                    )
+                    new TimeSeries(new ArrayList<>(), ts.getLabels(), newMinTimestamp, newMaxTimestamp, ts.getStep(), ts.getAlias())
                 );
             } else {
                 // Extract sublist of samples in range
                 List<Sample> truncatedSamples = new ArrayList<>(samples.subList(startIndex, endIndex + 1));
-                result.add(
-                    new TimeSeries(
-                        truncatedSamples,
-                        ts.getLabels(),
-                        ts.getMinTimestamp(),
-                        ts.getMaxTimestamp(),
-                        ts.getStep(),
-                        ts.getAlias()
-                    )
-                );
+                result.add(new TimeSeries(truncatedSamples, ts.getLabels(), newMinTimestamp, newMaxTimestamp, ts.getStep(), ts.getAlias()));
             }
         }
 
@@ -106,14 +113,14 @@ public class TruncateStage implements UnaryPipelineStage {
     }
 
     /**
-     * Finds the first index where timestamp >= minTimestamp using binary search.
+     * Finds the first index where timestamp >= truncateStart using binary search.
      *
      * @param samples the list of samples (assumed to be sorted by timestamp)
-     * @param minTimestamp the minimum timestamp
+     * @param truncateStart the truncation start timestamp
      * @return the start index
      */
-    private int findStartIndex(List<Sample> samples, long minTimestamp) {
-        int index = Collections.binarySearch(samples, new FloatSample(minTimestamp, 0.0), Comparator.comparingLong(Sample::getTimestamp));
+    private int findStartIndex(List<Sample> samples, long truncateStart) {
+        int index = Collections.binarySearch(samples, new FloatSample(truncateStart, 0.0), Comparator.comparingLong(Sample::getTimestamp));
 
         if (index >= 0) {
             // Exact match found, return this index
@@ -126,18 +133,19 @@ public class TruncateStage implements UnaryPipelineStage {
     }
 
     /**
-     * Finds the last index where timestamp <= maxTimestamp using binary search.
+     * Finds the last index where timestamp < truncateEnd using binary search.
+     * Since truncateEnd is exclusive, we exclude any sample with timestamp >= truncateEnd.
      *
      * @param samples the list of samples (assumed to be sorted by timestamp)
-     * @param maxTimestamp the maximum timestamp
+     * @param truncateEnd the truncation end timestamp (exclusive)
      * @return the end index
      */
-    private int findEndIndex(List<Sample> samples, long maxTimestamp) {
-        int index = Collections.binarySearch(samples, new FloatSample(maxTimestamp, 0.0), Comparator.comparingLong(Sample::getTimestamp));
+    private int findEndIndex(List<Sample> samples, long truncateEnd) {
+        int index = Collections.binarySearch(samples, new FloatSample(truncateEnd, 0.0), Comparator.comparingLong(Sample::getTimestamp));
 
         if (index >= 0) {
-            // Exact match found, return this index
-            return index;
+            // Exact match found, but truncateEnd is exclusive, so return index - 1
+            return index - 1;
         } else {
             // Not found, index = -(insertion point) - 1
             // We want the last element before the insertion point
@@ -152,14 +160,14 @@ public class TruncateStage implements UnaryPipelineStage {
 
     @Override
     public void toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
-        builder.field("min_timestamp", minTimestamp);
-        builder.field("max_timestamp", maxTimestamp);
+        builder.field("truncate_start", truncateStart);
+        builder.field("truncate_end", truncateEnd);
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeLong(minTimestamp);
-        out.writeLong(maxTimestamp);
+        out.writeLong(truncateStart);
+        out.writeLong(truncateEnd);
     }
 
     /**
@@ -170,9 +178,9 @@ public class TruncateStage implements UnaryPipelineStage {
      * @throws IOException if an I/O error occurs
      */
     public static TruncateStage readFrom(StreamInput in) throws IOException {
-        long minTimestamp = in.readLong();
-        long maxTimestamp = in.readLong();
-        return new TruncateStage(minTimestamp, maxTimestamp);
+        long truncateStart = in.readLong();
+        long truncateEnd = in.readLong();
+        return new TruncateStage(truncateStart, truncateEnd);
     }
 
     /**
@@ -183,12 +191,12 @@ public class TruncateStage implements UnaryPipelineStage {
      * @throws IllegalArgumentException if required parameters are missing
      */
     public static TruncateStage fromArgs(Map<String, Object> args) {
-        if (!args.containsKey("min_timestamp") || !args.containsKey("max_timestamp")) {
-            throw new IllegalArgumentException("TruncateStage requires both 'min_timestamp' and 'max_timestamp' parameters");
+        if (!args.containsKey("truncate_start") || !args.containsKey("truncate_end")) {
+            throw new IllegalArgumentException("TruncateStage requires both 'truncate_start' and 'truncate_end' parameters");
         }
-        long minTimestamp = ((Number) args.get("min_timestamp")).longValue();
-        long maxTimestamp = ((Number) args.get("max_timestamp")).longValue();
-        return new TruncateStage(minTimestamp, maxTimestamp);
+        long truncateStart = ((Number) args.get("truncate_start")).longValue();
+        long truncateEnd = ((Number) args.get("truncate_end")).longValue();
+        return new TruncateStage(truncateStart, truncateEnd);
     }
 
     @Override
@@ -201,11 +209,11 @@ public class TruncateStage implements UnaryPipelineStage {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
         TruncateStage that = (TruncateStage) obj;
-        return Objects.equals(minTimestamp, that.minTimestamp) && Objects.equals(maxTimestamp, that.maxTimestamp);
+        return Objects.equals(truncateStart, that.truncateStart) && Objects.equals(truncateEnd, that.truncateEnd);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(minTimestamp, maxTimestamp);
+        return Objects.hash(truncateStart, truncateEnd);
     }
 }

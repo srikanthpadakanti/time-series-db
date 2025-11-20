@@ -442,8 +442,8 @@
           },
           {
             "type" : "truncate",
-            "min_timestamp" : 1000000000,
-            "max_timestamp" : 1001000000
+            "truncate_start" : 1000000000,
+            "truncate_end" : 1001000000
           }
         ],
         "references" : {

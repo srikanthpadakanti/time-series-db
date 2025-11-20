@@ -252,4 +252,34 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         assertEquals(maxTimestamp, timeSeries.getMaxTimestamp());
         assertEquals(step, timeSeries.getStep());
     }
+
+    public void testCalculateAlignedMaxTimestamp_PerfectlyAligned() {
+        // queryStart=1000, queryEnd=2000 (exclusive), step=1000
+        // Expected: 1000 (not 2000, since queryEnd is exclusive)
+        long result = TimeSeries.calculateAlignedMaxTimestamp(1000L, 2000L, 1000L);
+        assertEquals(1000L, result);
+    }
+
+    public void testCalculateAlignedMaxTimestamp_NotAligned() {
+        // queryStart=1000, queryEnd=1995, step=200
+        // Expected: 1800 (largest value = 1000 + N*200 where result < 1995)
+        long result = TimeSeries.calculateAlignedMaxTimestamp(1000L, 1995L, 200L);
+        assertEquals(1800L, result);
+    }
+
+    public void testCalculateAlignedMaxTimestamp_ThrowsOnInvalidStep() {
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> TimeSeries.calculateAlignedMaxTimestamp(1000L, 2000L, 0L)
+        );
+        assertTrue(exception.getMessage().contains("Step must be positive"));
+    }
+
+    public void testCalculateAlignedMaxTimestamp_ThrowsOnInvalidRange() {
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> TimeSeries.calculateAlignedMaxTimestamp(2000L, 1000L, 100L)
+        );
+        assertTrue(exception.getMessage().contains("Query end must be greater than query start"));
+    }
 }

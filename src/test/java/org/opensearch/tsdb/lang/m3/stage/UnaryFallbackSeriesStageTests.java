@@ -65,7 +65,8 @@ public class UnaryFallbackSeriesStageTests extends AbstractWireSerializingTestCa
         // Verify labels are empty (no "fallback" label)
         assertEquals("", constantSeries.getLabels().get("fallback"));
         assertEquals(minTimestamp, constantSeries.getMinTimestamp());
-        assertEquals(maxTimestamp, constantSeries.getMaxTimestamp());
+        // maxTimestamp in TimeSeries is the last sample timestamp (20), not the exclusive upper bound (30)
+        assertEquals(20L, constantSeries.getMaxTimestamp());
         assertEquals(step, constantSeries.getStep());
 
         // Verify samples are generated correctly (maxTimestamp is exclusive, so no sample at 30)
@@ -167,7 +168,8 @@ public class UnaryFallbackSeriesStageTests extends AbstractWireSerializingTestCa
         assertEquals(1, result.size());
         TimeSeries constantSeries = result.get(0);
         assertEquals(0L, constantSeries.getMinTimestamp());
-        assertEquals(30L, constantSeries.getMaxTimestamp());
+        // maxTimestamp in TimeSeries is the last sample timestamp (15), not the exclusive upper bound (30)
+        assertEquals(15L, constantSeries.getMaxTimestamp());
         assertEquals(15L, constantSeries.getStep());
         assertEquals(3.0, ((FloatSample) constantSeries.getSamples().get(0)).getValue(), 0.001);
     }

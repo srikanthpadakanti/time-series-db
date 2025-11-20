@@ -108,7 +108,11 @@ public class FallbackSeriesUnaryStage implements UnaryPipelineStage {
         // Create labels for the constant series
         ByteLabels labels = ByteLabels.emptyLabels();
 
-        return List.of(new TimeSeries(samples, labels, minTimestamp, maxTimestamp, step, null));
+        // Calculate the actual last sample timestamp (inclusive) for TimeSeries
+        // Since maxTimestamp is exclusive, the last sample is the largest minTimestamp + N*step < maxTimestamp
+        long lastSampleTimestamp = TimeSeries.calculateAlignedMaxTimestamp(minTimestamp, maxTimestamp, step);
+
+        return List.of(new TimeSeries(samples, labels, minTimestamp, lastSampleTimestamp, step, null));
     }
 
     /**
