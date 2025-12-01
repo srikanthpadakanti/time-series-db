@@ -36,4 +36,14 @@ public interface Retention {
      * @param frequency long representing frequency in milliseconds.
      */
     default void setFrequency(long frequency) {}
+
+    /**
+     * Returns the configured retention period in milliseconds, if applicable.
+     * Implementations that do not use a fixed period may return -1.
+     *
+     * @return retention period in milliseconds or -1 if not applicable
+     */
+    default long getRetentionPeriodMs() {
+        return -1L;
+    }
 }

@@ -10,6 +10,7 @@ package org.opensearch.tsdb.metrics;
 import org.opensearch.telemetry.metrics.Counter;
 import org.opensearch.telemetry.metrics.Histogram;
 import org.opensearch.telemetry.metrics.MetricsRegistry;
+import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.test.OpenSearchTestCase;
 
 import static org.mockito.ArgumentMatchers.anyString;
@@ -43,9 +44,9 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
 
         assertTrue(TSDBMetrics.isInitialized());
         assertSame(registry, TSDBMetrics.getRegistry());
-        assertNotNull(TSDBMetrics.INGESTION.samplesIngested);
-        assertNotNull(TSDBMetrics.INGESTION.seriesCreated);
-        assertNotNull(TSDBMetrics.INGESTION.memChunksCreated);
+        assertNotNull(TSDBMetrics.ENGINE.samplesIngested);
+        assertNotNull(TSDBMetrics.ENGINE.seriesCreated);
+        assertNotNull(TSDBMetrics.ENGINE.memChunksCreated);
         assertNotNull(TSDBMetrics.AGGREGATION.collectLatency);
         assertNotNull(TSDBMetrics.AGGREGATION.postCollectLatency);
     }
@@ -70,7 +71,7 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
 
         assertFalse(TSDBMetrics.isInitialized());
         assertNull(TSDBMetrics.getRegistry());
-        assertNull(TSDBMetrics.INGESTION.samplesIngested);
+        assertNull(TSDBMetrics.ENGINE.samplesIngested);
         assertNull(TSDBMetrics.AGGREGATION.collectLatency);
     }
 
@@ -89,19 +90,19 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
         TSDBMetrics.initialize(registry);
         assertTrue(TSDBMetrics.isInitialized());
         assertSame(registry, TSDBMetrics.getRegistry());
-        assertNotNull(TSDBMetrics.INGESTION.samplesIngested);
+        assertNotNull(TSDBMetrics.ENGINE.samplesIngested);
         assertNotNull(TSDBMetrics.AGGREGATION.collectLatency);
     }
 
     public void testDoubleInitialization() {
         TSDBMetrics.initialize(registry);
-        Counter firstCounter = TSDBMetrics.INGESTION.samplesIngested;
+        Counter firstCounter = TSDBMetrics.ENGINE.samplesIngested;
 
         // Second initialization should be ignored
         MetricsRegistry newRegistry = mock(MetricsRegistry.class);
         TSDBMetrics.initialize(newRegistry);
 
-        assertSame(firstCounter, TSDBMetrics.INGESTION.samplesIngested);
+        assertSame(firstCounter, TSDBMetrics.ENGINE.samplesIngested);
         assertSame(registry, TSDBMetrics.getRegistry());
     }
 
@@ -122,19 +123,19 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
     public void testCleanup() {
         TSDBMetrics.initialize(registry);
         assertTrue(TSDBMetrics.isInitialized());
-        assertNotNull(TSDBMetrics.INGESTION.samplesIngested);
+        assertNotNull(TSDBMetrics.ENGINE.samplesIngested);
 
         TSDBMetrics.cleanup();
 
         assertFalse(TSDBMetrics.isInitialized());
         assertNull(TSDBMetrics.getRegistry());
-        assertNull(TSDBMetrics.INGESTION.samplesIngested);
-        assertNull(TSDBMetrics.INGESTION.seriesCreated);
+        assertNull(TSDBMetrics.ENGINE.samplesIngested);
+        assertNull(TSDBMetrics.ENGINE.seriesCreated);
         assertNull(TSDBMetrics.AGGREGATION.collectLatency);
     }
 
-    public void testCleanupBeforeInitialization() {
-        // Should not throw
+    public void testCleanupSafeWithoutInitialization() {
+        // Should not throw when cleanup called before initialize
         TSDBMetrics.cleanup();
         assertFalse(TSDBMetrics.isInitialized());
     }
@@ -144,10 +145,10 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
         Counter mockCounter = mock(Counter.class);
 
         TSDBMetrics.incrementCounter(mockCounter, 5);
-        verify(mockCounter).add(5);
+        verify(mockCounter).add(5, Tags.EMPTY);
 
         TSDBMetrics.incrementCounter(mockCounter, 10);
-        verify(mockCounter).add(10);
+        verify(mockCounter).add(10, Tags.EMPTY);
     }
 
     public void testIncrementCounterWhenNotInitialized() {
@@ -155,7 +156,7 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
 
         TSDBMetrics.incrementCounter(mockCounter, 5);
 
-        verify(mockCounter, never()).add(5);
+        verify(mockCounter, never()).add(5, Tags.EMPTY);
     }
 
     public void testIncrementCounterWithNullCounter() {
@@ -180,10 +181,10 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
         Histogram mockHistogram = mock(Histogram.class);
 
         TSDBMetrics.recordHistogram(mockHistogram, 100.5);
-        verify(mockHistogram).record(100.5);
+        verify(mockHistogram).record(100.5, Tags.EMPTY);
 
         TSDBMetrics.recordHistogram(mockHistogram, 50.25);
-        verify(mockHistogram).record(50.25);
+        verify(mockHistogram).record(50.25, Tags.EMPTY);
     }
 
     public void testRecordHistogramWhenNotInitialized() {
@@ -191,7 +192,7 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
 
         TSDBMetrics.recordHistogram(mockHistogram, 100.0);
 
-        verify(mockHistogram, never()).record(100.0);
+        verify(mockHistogram, never()).record(100.0, Tags.EMPTY);
     }
 
     public void testRecordHistogramWithNullHistogram() {
@@ -211,13 +212,36 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
         verify(mockHistogram, never()).record(100.0);
     }
 
-    public void testIngestionMetricsInitialized() {
+    public void testEngineMetricsInitialized() {
         TSDBMetrics.initialize(registry);
 
-        assertNotNull(TSDBMetrics.INGESTION);
-        assertNotNull(TSDBMetrics.INGESTION.samplesIngested);
-        assertNotNull(TSDBMetrics.INGESTION.seriesCreated);
-        assertNotNull(TSDBMetrics.INGESTION.memChunksCreated);
+        assertNotNull(TSDBMetrics.ENGINE);
+        assertNotNull(TSDBMetrics.ENGINE.samplesIngested);
+        assertNotNull(TSDBMetrics.ENGINE.seriesCreated);
+        assertNotNull(TSDBMetrics.ENGINE.memChunksCreated);
+        assertNotNull(TSDBMetrics.ENGINE.seriesClosedTotal);
+        assertNotNull(TSDBMetrics.ENGINE.memChunksExpiredTotal);
+        assertNotNull(TSDBMetrics.ENGINE.memChunksClosedTotal);
+        assertNotNull(TSDBMetrics.ENGINE.closedChunkSize);
+        assertNotNull(TSDBMetrics.ENGINE.flushLatency);
+    }
+
+    public void testIndexMetricsInitialized() {
+        TSDBMetrics.initialize(registry);
+
+        assertNotNull(TSDBMetrics.INDEX);
+        assertNotNull(TSDBMetrics.INDEX.indexCreatedTotal);
+        assertNotNull(TSDBMetrics.INDEX.retentionSuccessTotal);
+        assertNotNull(TSDBMetrics.INDEX.retentionFailureTotal);
+        assertNotNull(TSDBMetrics.INDEX.compactionSuccessTotal);
+        assertNotNull(TSDBMetrics.INDEX.compactionFailureTotal);
+        assertNotNull(TSDBMetrics.INDEX.compactionDeletedTotal);
+        assertNotNull(TSDBMetrics.INDEX.indexSize);
+        assertNotNull(TSDBMetrics.INDEX.indexOnlineAge);
+        assertNotNull(TSDBMetrics.INDEX.indexOfflineAge);
+        assertNotNull(TSDBMetrics.INDEX.retentionLatency);
+        assertNotNull(TSDBMetrics.INDEX.retentionAge);
+        assertNotNull(TSDBMetrics.INDEX.compactionLatency);
     }
 
     public void testAggregationMetricsInitialized() {
@@ -249,17 +273,11 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
         assertEquals(registry, TSDBMetrics.getRegistry());
     }
 
-    public void testConstructorForTestingCoverage() {
-        // Public constructor exists for testing
-        TSDBMetrics metrics = new TSDBMetrics();
-        assertNotNull(metrics);
-    }
-
-    public void testMultipleCleanupCalls() {
+    public void testCleanupIdempotent() {
         TSDBMetrics.initialize(registry);
 
         TSDBMetrics.cleanup();
-        TSDBMetrics.cleanup(); // Should not throw
+        TSDBMetrics.cleanup(); // Second call should not throw
 
         assertFalse(TSDBMetrics.isInitialized());
     }

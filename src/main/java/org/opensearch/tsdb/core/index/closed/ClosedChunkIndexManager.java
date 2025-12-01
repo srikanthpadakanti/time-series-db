@@ -35,6 +35,7 @@ import org.opensearch.tsdb.core.head.MemSeries;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.retention.Retention;
 import org.opensearch.tsdb.core.utils.Time;
+import org.opensearch.tsdb.metrics.TSDBMetrics;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -162,6 +163,7 @@ public class ClosedChunkIndexManager implements Closeable {
         try {
             if (Instant.now().isAfter(lastRetentionTime.plusMillis(retention.getFrequency()))) {
                 lastRetentionTime = Instant.now();
+                long retentionStart = System.nanoTime();
                 var candidates = retention.plan(getClosedChunkIndexes(Instant.ofEpochMilli(0), Instant.now()));
                 log.info(
                     "Running retention cycle, indexes in the scope: {}",
@@ -176,14 +178,22 @@ public class ClosedChunkIndexManager implements Closeable {
                         if (!removed.isEmpty()) {
                             org.opensearch.tsdb.core.utils.Files.deleteDirectory(closedChunkIndex.getPath().toAbsolutePath());
                             pendingClosureIndexes.removeAll(removed);
+                            TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.retentionSuccessTotal, removed.size());
                         }
                     } catch (Exception e) {
                         log.error("Failed to remove index", e);
+                        TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.retentionFailureTotal, 1);
                     }
                 }
 
                 candidates.removeAll(pendingClosureIndexes);
                 logCurrentAgeOfIndexes(getClosedChunkIndexes(Instant.ofEpochMilli(0), Instant.now()), candidates);
+                long retentionDurationMs = (System.nanoTime() - retentionStart) / 1_000_000L;
+                TSDBMetrics.recordHistogram(TSDBMetrics.INDEX.retentionLatency, retentionDurationMs);
+                long retentionAgeMs = retention.getRetentionPeriodMs();
+                if (retentionAgeMs >= 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.INDEX.retentionAge, retentionAgeMs);
+                }
             }
 
             if (Instant.now().isAfter(lastCompactionTime.plusMillis(compaction.getFrequency()))) {
@@ -193,16 +203,24 @@ public class ClosedChunkIndexManager implements Closeable {
                 if (!plan.isEmpty()) {
                     if (lockIndexesForWrites(plan, Instant.now().plus(COMPACTION_LOCK_ACQUISITION_TIMEOUT))) {
                         try {
+                            long compactionStart = System.nanoTime();
                             var compactedIndex = compactIndexes(plan);
                             pendingClosureIndexes.addAll(plan);
                             swapIndexes(plan, compactedIndex);
                             var removed = closeIndexes(new HashSet<>(plan));
                             pendingClosureIndexes.removeAll(removed);
+                            long compactionDurationMs = (System.nanoTime() - compactionStart) / 1_000_000L;
+                            TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.compactionSuccessTotal, 1);
+                            TSDBMetrics.recordHistogram(TSDBMetrics.INDEX.compactionLatency, compactionDurationMs);
+                            if (!removed.isEmpty()) {
+                                TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.compactionDeletedTotal, removed.size());
+                            }
                         } finally {
                             indexesUndergoingCompaction.clear();
                         }
                     } else {
                         log.warn("Failed to lock indexes for compaction, will try again later.");
+                        TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.compactionFailureTotal, 1);
                     }
                 }
             }
@@ -210,6 +228,12 @@ public class ClosedChunkIndexManager implements Closeable {
             var success = closeIndexes(pendingClosureIndexes);
             pendingClosureIndexes.removeAll(success);
             deleteOrphanDirectories();
+            try {
+                long totalSize = sizeOf(closedChunkIndexMap.values().toArray(ClosedChunkIndex[]::new));
+                TSDBMetrics.recordHistogram(TSDBMetrics.INDEX.indexSize, totalSize);
+            } catch (Exception e) {
+                log.error("Failed to record index size metric", e);
+            }
         } catch (Exception e) {
             log.error("Failed to run optimization cycle", e);
         }
@@ -232,6 +256,9 @@ public class ClosedChunkIndexManager implements Closeable {
             onlineIndexesAge,
             offlineIndexesAge
         );
+        // metrics: record ages
+        TSDBMetrics.recordHistogram(TSDBMetrics.INDEX.indexOnlineAge, onlineIndexesAge);
+        TSDBMetrics.recordHistogram(TSDBMetrics.INDEX.indexOfflineAge, offlineIndexesAge);
     }
 
     /**
@@ -536,6 +563,7 @@ public class ClosedChunkIndexManager implements Closeable {
         }
 
         log.info("Created new block dir:{}, range: [{},{}]", dirName, newIndexMinTime, newIndexMaxTime);
+        TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.indexCreatedTotal, 1);
         return newIndex;
     }
 

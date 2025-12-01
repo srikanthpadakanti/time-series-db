@@ -15,9 +15,10 @@ public final class TSDBMetricsConstants {
     }
 
     // ============================================
-    // Ingestion Metrics (Engine-level)
+    // Engine Metrics (Ingestion, Lifecycle, Flush)
     // ============================================
 
+    // Ingestion Counters
     /** Counter: Total number of samples ingested into TSDB across all shards */
     public static final String SAMPLES_INGESTED_TOTAL = "tsdb.samples.ingested.total";
 
@@ -36,8 +37,34 @@ public final class TSDBMetricsConstants {
     /** Counter: Total number of out-of-order chunks merged across all shards */
     public static final String OOO_CHUNKS_MERGED_TOTAL = "tsdb.ooo_chunks.merged.total";
 
+    // Lifecycle Counters
+    /** Counter: Total number of series closed (e.g., due to inactivity) */
+    public static final String SERIES_CLOSED_TOTAL = "tsdb.series.closed.total";
+
+    /** Counter: Total number of in-memory chunks expired (e.g., due to inactivity) */
+    public static final String MEMCHUNKS_EXPIRED_TOTAL = "tsdb.memchunks.expired.total";
+
+    /** Counter: Total number of memory chunks closed and flushed to disk */
+    public static final String MEMCHUNKS_CLOSED_TOTAL = "tsdb.memchunks.closed.total";
+
+    // Snapshot Histograms (Gauge-like metrics)
+    /** Histogram: Current number of open series in head (recorded on flush) */
+    public static final String SERIES_OPEN = "tsdb.series.open";
+
+    /** Histogram: Current number of open in-memory chunks in head (recorded on flush) */
+    public static final String MEMCHUNKS_OPEN = "tsdb.memchunks.open";
+
+    /** Histogram: Minimum sequence number among open in-memory chunks (recorded on flush) */
+    public static final String MEMCHUNKS_MINSEQ = "tsdb.memchunks.minseq";
+
+    /** Histogram: Size histogram (bytes) of closed chunks */
+    public static final String CLOSEDCHUNKS_SIZE = "tsdb.closedchunks.size";
+
+    /** Histogram: Latency of flush operation */
+    public static final String FLUSH_LATENCY = "tsdb.flush.latency";
+
     // ============================================
-    // Aggregation Metrics (TimeSeriesUnfoldAggregator)
+    // Aggregation Metrics (Query/Read Path)
     // ============================================
 
     /** Histogram: Latency of collect() operation per request */
@@ -77,16 +104,70 @@ public final class TSDBMetricsConstants {
     public static final String AGGREGATION_CHUNKS_FOR_DOC_ERRORS_TOTAL = "tsdb.aggregation.chunks_for_doc.errors.total";
 
     // ============================================
+    // Index Metrics (Retention, Compaction)
+    // ============================================
+
+    // Counters
+    /** Counter: Total number of closed chunk indexes created */
+    public static final String INDEX_CREATED_TOTAL = "tsdb.index.created.total";
+
+    /** Counter: Total number of indexes deleted by retention */
+    public static final String RETENTION_SUCCESS_TOTAL = "tsdb.retention.success.total";
+
+    /** Counter: Total number of failed retention deletions */
+    public static final String RETENTION_FAILURE_TOTAL = "tsdb.retention.failure.total";
+
+    /** Counter: Total number of successful compactions */
+    public static final String COMPACTION_SUCCESS_TOTAL = "tsdb.compaction.success.total";
+
+    /** Counter: Total number of failed compactions */
+    public static final String COMPACTION_FAILURE_TOTAL = "tsdb.compaction.failure.total";
+
+    /** Counter: Total number of indexes deleted by compaction */
+    public static final String COMPACTION_DELETED_TOTAL = "tsdb.compaction.deleted.total";
+
+    // Histograms
+    /** Histogram: Total size (bytes) of all closed chunk indexes */
+    public static final String INDEX_SIZE = "tsdb.index.size";
+
+    /** Histogram: Age (ms) of online indexes (first to last) */
+    public static final String INDEX_ONLINE_AGE = "tsdb.index.online.age";
+
+    /** Histogram: Age (ms) of indexes pending closure (offline) */
+    public static final String INDEX_OFFLINE_AGE = "tsdb.index.offline.age";
+
+    /** Histogram: Latency (ms) of retention operations */
+    public static final String RETENTION_LATENCY = "tsdb.retention.latency";
+
+    /** Histogram: Configured retention period (ms) */
+    public static final String RETENTION_AGE = "tsdb.retention.age";
+
+    /** Histogram: Latency (ms) of compaction operations */
+    public static final String COMPACTION_LATENCY = "tsdb.compaction.latency";
+
+    // ============================================
     // Metric Descriptions
     // ============================================
 
-    // Ingestion Metrics
+    // Engine Metrics - Ingestion
     public static final String SAMPLES_INGESTED_TOTAL_DESC = "Total number of samples ingested into TSDB across all shards";
     public static final String SERIES_CREATED_TOTAL_DESC = "Total number of time series created across all shards";
     public static final String MEMCHUNKS_CREATED_TOTAL_DESC = "Total number of memory chunks created across all shards";
     public static final String OOO_SAMPLES_REJECTED_TOTAL_DESC = "Total number of out-of-order samples rejected across all shards";
     public static final String OOO_CHUNKS_CREATED_TOTAL_DESC = "Total number of out-of-order chunks created across all shards";
     public static final String OOO_CHUNKS_MERGED_TOTAL_DESC = "Total number of out-of-order chunks merged across all shards";
+
+    // Engine Metrics - Lifecycle
+    public static final String SERIES_CLOSED_TOTAL_DESC = "Total number of series closed (e.g., due to inactivity)";
+    public static final String MEMCHUNKS_EXPIRED_TOTAL_DESC = "Total number of in-memory chunks expired (e.g., due to inactivity)";
+    public static final String MEMCHUNKS_CLOSED_TOTAL_DESC = "Total number of memory chunks closed and flushed to disk";
+
+    // Engine Metrics - Snapshots
+    public static final String SERIES_OPEN_DESC = "Current number of open series in head (recorded on flush)";
+    public static final String MEMCHUNKS_OPEN_DESC = "Current number of open in-memory chunks in head (recorded on flush)";
+    public static final String MEMCHUNKS_MINSEQ_DESC = "Minimum sequence number among open in-memory chunks (recorded on flush)";
+    public static final String CLOSEDCHUNKS_SIZE_DESC = "Size histogram (bytes) of closed chunks persisted to disk";
+    public static final String FLUSH_LATENCY_DESC = "Latency of flush operation";
 
     // Aggregation Metrics
     public static final String AGGREGATION_COLLECT_LATENCY_DESC = "Latency of collect() operation per aggregation request";
@@ -101,6 +182,20 @@ public final class TSDBMetricsConstants {
     public static final String AGGREGATION_SAMPLES_LIVE_DESC = "Live samples processed per aggregation request";
     public static final String AGGREGATION_SAMPLES_CLOSED_DESC = "Closed samples processed per aggregation request";
     public static final String AGGREGATION_CHUNKS_FOR_DOC_ERRORS_TOTAL_DESC = "Total errors in chunksForDoc() operations";
+
+    // Index Metrics
+    public static final String INDEX_CREATED_TOTAL_DESC = "Total number of closed chunk indexes created";
+    public static final String INDEX_SIZE_DESC = "Total size (bytes) of all closed chunk indexes";
+    public static final String INDEX_ONLINE_AGE_DESC = "Age (ms) of online indexes (first to last)";
+    public static final String INDEX_OFFLINE_AGE_DESC = "Age (ms) of indexes pending closure (offline)";
+    public static final String RETENTION_SUCCESS_TOTAL_DESC = "Total number of indexes deleted by retention";
+    public static final String RETENTION_FAILURE_TOTAL_DESC = "Total number of failed retention deletions";
+    public static final String RETENTION_LATENCY_DESC = "Latency (ms) of retention operations";
+    public static final String RETENTION_AGE_DESC = "Configured retention period (ms)";
+    public static final String COMPACTION_SUCCESS_TOTAL_DESC = "Total number of successful compactions";
+    public static final String COMPACTION_FAILURE_TOTAL_DESC = "Total number of failed compactions";
+    public static final String COMPACTION_LATENCY_DESC = "Latency (ms) of compaction operations";
+    public static final String COMPACTION_DELETED_TOTAL_DESC = "Total number of indexes deleted by compaction";
 
     // ============================================
     // Metric Units

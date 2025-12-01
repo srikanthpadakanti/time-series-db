@@ -166,6 +166,10 @@ public class TSDBEngine extends Engine {
                 closedChunkIndexManager,
                 engineConfig.getIndexSettings().getSettings()
             );
+
+            // Register pull-based gauge metrics for this Head instance
+            registerHeadGauges();
+
             this.localCheckpointTracker = createLocalCheckpointTracker();
             String translogUUID = Objects.requireNonNull(lastCommittedSegmentInfos.getUserData().get(Translog.TRANSLOG_UUID_KEY));
             this.translogManager = new InternalTranslogManager(
@@ -340,7 +344,7 @@ public class TSDBEngine extends Engine {
         } else {
             IndexResult successResult = new IndexResult(indexOp.version(), indexOp.primaryTerm(), indexOp.seqNo(), true);
             successResult.setTranslogLocation(context.translogLocation);
-            TSDBMetrics.incrementCounter(TSDBMetrics.INGESTION.samplesIngested, 1);
+            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.samplesIngested, 1, head.getMetricTags());
             return successResult;
         }
     }
@@ -563,6 +567,7 @@ public class TSDBEngine extends Engine {
         }
 
         // closeChunksLock has been acquired
+        long startNanos = System.nanoTime();
         try {
             // Check if translog is in recovery mode - block flush during local recovery
             try {
@@ -602,6 +607,8 @@ public class TSDBEngine extends Engine {
         } catch (Exception e) {
             logger.error("Error while MMAPing head chunks and processing flush operation", e);
         } finally {
+            long durationMs = (System.nanoTime() - startNanos) / 1_000_000L;
+            TSDBMetrics.recordHistogram(TSDBMetrics.ENGINE.flushLatency, durationMs);
             closeChunksLock.unlock();
         }
     }
@@ -1247,7 +1254,7 @@ public class TSDBEngine extends Engine {
     }
 
     /**
-     * Creates and returns a metrics directory reader reference manager that aggregates
+     * Creates and returns a TSDB directory reader reference manager that aggregates
      * readers from both the live series index and closed chunk indexes.
      */
     private ReferenceManager<OpenSearchDirectoryReader> getTsdbReaderManager() {
@@ -1443,5 +1450,30 @@ public class TSDBEngine extends Engine {
                 segmentInfosLock.unlock();
             }
         }
+    }
+
+    /**
+     * Register pull-based gauge metrics for the Head instance.
+     * These gauges use Supplier callbacks that are invoked when metrics are scraped,
+     * providing always-accurate counts without manual updates.
+     */
+    private void registerHeadGauges() {
+        if (!TSDBMetrics.isInitialized() || head == null) {
+            return; // Metrics not initialized or head not created yet
+        }
+
+        final Head headRef = this.head;
+
+        TSDBMetrics.ENGINE.registerGauges(
+            TSDBMetrics.getRegistry(),
+            () -> (double) headRef.getNumSeries(),           // Current series count
+            () -> {
+                // Minimum sequence number - convert Long.MAX_VALUE to 0 for metrics
+                // (Long.MAX_VALUE is internal sentinel, not meaningful for observability)
+                long minSeq = headRef.getMinSeqNo();
+                return minSeq == Long.MAX_VALUE ? 0.0 : (double) minSeq;
+            },
+            headRef.getMetricTags()
+        );
     }
 }

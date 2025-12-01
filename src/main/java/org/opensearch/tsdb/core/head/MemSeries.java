@@ -154,6 +154,8 @@ public class MemSeries {
             while (chunk != null) {
                 if (chunk.getMaxTimestamp() <= cutoffTimestamp) {
                     closableChunks.addFirst(chunk);
+                    // Record memchunk expiry due to inactivity (chunks past the cutoff timestamp)
+                    TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.memChunksExpiredTotal, 1);
                 } else {
                     minSeqNo = Math.min(minSeqNo, chunk.getMinSeqNo());
                 }
@@ -252,7 +254,7 @@ public class MemSeries {
         long end = endRangeForTimestamp(timestamp, chunkRange);
 
         MemChunk chunk = new MemChunk(seqNo, start, end, headChunk, encoding);
-        TSDBMetrics.incrementCounter(TSDBMetrics.INGESTION.memChunksCreated, 1);
+        TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.memChunksCreated, 1);
         return chunk;
     }
 
@@ -270,7 +272,7 @@ public class MemSeries {
         long start = startRangeForTimestamp(timestamp, chunkRange);
         long end = endRangeForTimestamp(timestamp, chunkRange);
         MemChunk newChunk = new MemChunk(seqNo, start, end, null, encoding);
-        TSDBMetrics.incrementCounter(TSDBMetrics.INGESTION.memChunksCreated, 1);
+        TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.memChunksCreated, 1);
 
         MemChunk current = headChunk;
         assert headChunk != null : "createOldChunk only called when there is at least one existing chunk";

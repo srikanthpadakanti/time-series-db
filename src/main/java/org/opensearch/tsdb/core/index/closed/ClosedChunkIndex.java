@@ -39,6 +39,7 @@ import org.opensearch.core.common.io.stream.BytesStreamInput;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.TSDBPlugin;
+import org.opensearch.tsdb.core.chunk.Chunk;
 import org.opensearch.tsdb.core.head.MemChunk;
 import org.opensearch.tsdb.core.head.MemSeries;
 import org.opensearch.tsdb.core.mapping.LabelStorageType;
@@ -46,6 +47,7 @@ import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.utils.TimestampRangeEncoding;
 import org.opensearch.tsdb.core.utils.Time;
+import org.opensearch.tsdb.metrics.TSDBMetrics;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -139,6 +141,9 @@ public class ClosedChunkIndex implements Closeable {
      * @throws IOException if there is an error adding the chunk
      */
     public void addNewChunk(Labels labels, MemChunk memChunk) throws IOException {
+        // Convert MemChunk to Chunk once and reuse for both serialization and metrics
+        Chunk chunk = memChunk.getCompoundChunk().toChunk();
+
         Document doc = new Document();
         doc.add(new NumericDocValuesField(Constants.IndexSchema.LABELS_HASH, labels.stableHash()));
 
@@ -152,9 +157,7 @@ public class ClosedChunkIndex implements Closeable {
         // Add labels to DocValues using configured storage type
         labelStorageType.addLabelsToDocument(doc, labels, labelRefs);
 
-        doc.add(
-            new BinaryDocValuesField(Constants.IndexSchema.CHUNK, ClosedChunkIndexIO.serializeChunk(memChunk.getCompoundChunk().toChunk()))
-        );
+        doc.add(new BinaryDocValuesField(Constants.IndexSchema.CHUNK, ClosedChunkIndexIO.serializeChunk(chunk)));
         long minTs = memChunk.getMinTimestamp();
         long maxTs = memChunk.getMaxTimestamp();
 
@@ -169,6 +172,9 @@ public class ClosedChunkIndex implements Closeable {
         doc.add(new BinaryDocValuesField(Constants.IndexSchema.TIMESTAMP_RANGE, TimestampRangeEncoding.encodeRange(minTs, maxTs)));
 
         indexWriter.addDocument(doc);
+
+        // Record closed chunk size
+        TSDBMetrics.recordHistogram(TSDBMetrics.ENGINE.closedChunkSize, chunk.bytesSize());
     }
 
     /**

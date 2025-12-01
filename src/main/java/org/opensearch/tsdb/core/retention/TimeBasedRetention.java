@@ -61,4 +61,9 @@ public class TimeBasedRetention implements Retention {
     public void setFrequency(long frequency) {
         this.interval = frequency;
     }
+
+    @Override
+    public long getRetentionPeriodMs() {
+        return duration;
+    }
 }

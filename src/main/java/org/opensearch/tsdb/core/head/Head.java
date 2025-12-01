@@ -28,6 +28,7 @@ import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.utils.Time;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
+import org.opensearch.telemetry.metrics.tags.Tags;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -56,6 +57,8 @@ public class Head implements Closeable {
     private final LiveSeriesIndex liveSeriesIndex;
     private final SeriesMap seriesMap;
     private final ClosedChunkIndexManager closedChunkIndexManager;
+    private final ShardId shardId;
+    private final Tags metricTags;
     private volatile long maxTime; // volatile to ensure the flush thread sees updates
 
     /**
@@ -68,8 +71,12 @@ public class Head implements Closeable {
     public Head(Path dir, ShardId shardId, ClosedChunkIndexManager closedChunkIndexManager, Settings indexSettings) throws IOException {
         try {
             log = Loggers.getLogger(Head.class, shardId);
+            this.shardId = shardId;
             maxTime = Long.MIN_VALUE;
             seriesMap = new SeriesMap();
+
+            // Create and cache metric tags for this shard
+            metricTags = Tags.create().addTag("index", shardId.getIndexName()).addTag("shard", (long) shardId.getId());
 
             TimeUnit timeUnit = TimeUnit.valueOf(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.get(indexSettings));
             long chunkRange = Time.toTimestamp(TSDBPlugin.TSDB_ENGINE_CHUNK_DURATION.get(indexSettings), timeUnit);
@@ -120,6 +127,15 @@ public class Head implements Closeable {
     }
 
     /**
+     * Get the cached metric tags for this Head instance.
+     *
+     * @return Tags containing index name and shard ID
+     */
+    public Tags getMetricTags() {
+        return metricTags;
+    }
+
+    /**
      * Initialize the min and max time if they are not already set.
      *
      * @param timestamp the timestamp to initialize with
@@ -166,7 +182,7 @@ public class Head implements Closeable {
                     // MIN_TIMESTAMP is set to (sample_timestamp - OOO_cutoff) to allow retrieval of late-arriving samples.
                     long minTimestampForDoc = timestamp - oooCutoffWindow;
                     liveSeriesIndex.addSeries(labels, hash, minTimestampForDoc);
-                    TSDBMetrics.incrementCounter(TSDBMetrics.INGESTION.seriesCreated, 1);
+                    TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.seriesCreated, 1, metricTags);
                 } else {
                     // Stub series created: increment counter
                     seriesMap.incrementStubSeriesCount();
@@ -176,7 +192,6 @@ public class Head implements Closeable {
                         seriesMap.getStubSeriesCount()
                     );
                 }
-
                 return new SeriesResult(newSeries, true);
             } else {
                 return new SeriesResult(actualSeries, false);
@@ -214,7 +229,7 @@ public class Head implements Closeable {
                 // MIN_TIMESTAMP is set to (sample_timestamp - OOO_cutoff) to allow retrieval of late-arriving samples.
                 long minTimestampForDoc = timestamp - oooCutoffWindow;
                 liveSeriesIndex.addSeries(labels, hash, minTimestampForDoc);
-                TSDBMetrics.incrementCounter(TSDBMetrics.INGESTION.seriesCreated, 1);
+                TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.seriesCreated, 1, metricTags);
                 log.info("Upgraded stub series with labels: ref={}, labels={}, minTimestampForDoc={}", hash, labels, minTimestampForDoc);
             } finally {
                 series.unlock();
@@ -292,9 +307,16 @@ public class Head implements Closeable {
         // TODO: delegate removal to ReferenceManager
         // If minSeqNoToKeep is Long.MAX_VALUE indicating either no series or all chunks are closed, skip dropping empty series.
         // They will be dropped in the next cycle if still empty.
+        int closedSeries = 0;
         if (allowDropEmptySeries && minSeqNoToKeep != Long.MAX_VALUE) {
             // drop all series with sequence number smaller than the minimum sequence number retained in memory
-            dropEmptySeries(indexChunksResult.minSeqNo());
+            closedSeries = dropEmptySeries(indexChunksResult.minSeqNo());
+        }
+
+        // Record push-based counters (pull-based gauges registered separately via TSDBEngine.registerHeadGauges)
+        TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.memChunksClosedTotal, indexChunksResult.numClosedChunks(), metricTags);
+        if (closedSeries > 0) {
+            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.seriesClosedTotal, closedSeries, metricTags);
         }
 
         // TODO consider returning in an incremental fashion, to avoid no-op reprocessing if the server crashes between CCI commits
@@ -310,6 +332,7 @@ public class Head implements Closeable {
     private IndexChunksResult indexCloseableChunks(List<MemSeries> seriesList) {
         long minSeqNo = Long.MAX_VALUE;
         Map<MemSeries, Set<MemChunk>> seriesToClosedChunks = new HashMap<>();
+        int totalClosedChunks = 0;
 
         long cutoffTimestamp = maxTime - oooCutoffWindow;
         log.info("Closing head chunks before timestamp: {}", cutoffTimestamp);
@@ -345,15 +368,19 @@ public class Head implements Closeable {
                     minSeqNo = failedChunk.getMinSeqNo();
                 }
             }
+            totalClosedChunks += addedChunks;
         }
-        return new IndexChunksResult(seriesToClosedChunks, minSeqNo);
+        return new IndexChunksResult(seriesToClosedChunks, minSeqNo, totalClosedChunks);
     }
 
     /**
-     * @param seriesToClosedChunks map of MemSeries to MemChunks to be dropped later
-     * @param minSeqNo             minimum sequence number of in-memory/non-flushed samples
+     * Result of indexing closeable chunks operation.
+     *
+     * @param seriesToClosedChunks map of MemSeries to the set of MemChunks that were successfully indexed and should be dropped from memory
+     * @param minSeqNo             minimum sequence number among all remaining in-memory (non-closed) samples, or Long.MAX_VALUE if all chunks were closed
+     * @param numClosedChunks      total count of MemChunks that were closed and indexed
      */
-    private record IndexChunksResult(Map<MemSeries, Set<MemChunk>> seriesToClosedChunks, long minSeqNo) {
+    private record IndexChunksResult(Map<MemSeries, Set<MemChunk>> seriesToClosedChunks, long minSeqNo, int numClosedChunks) {
     }
 
     /**
@@ -366,7 +393,7 @@ public class Head implements Closeable {
         }
     }
 
-    private void dropEmptySeries(long minSeqNoToKeep) {
+    private int dropEmptySeries(long minSeqNoToKeep) {
         List<Long> refs = new ArrayList<>();
         List<MemSeries> allSeries = seriesMap.getSeriesMap();
         for (MemSeries series : allSeries) {
@@ -392,6 +419,7 @@ public class Head implements Closeable {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        return refs.size();
     }
 
     /**
@@ -405,6 +433,23 @@ public class Head implements Closeable {
 
     private HeadAppender.AppendContext getAppendContext() {
         return appendContext;
+    }
+
+    /**
+     * Get the minimum sequence number across all open memory chunks.
+     * Made public to support pull-based gauge metrics.
+     *
+     * @return minimum sequence number, or Long.MAX_VALUE if no memchunks exist
+     */
+    public long getMinSeqNo() {
+        long minSeqNo = Long.MAX_VALUE;
+        for (MemSeries s : seriesMap.getSeriesMap()) {
+            MemChunk hc = s.getHeadChunk();
+            if (hc != null && hc.getMinSeqNo() < minSeqNo) {
+                minSeqNo = hc.getMinSeqNo();
+            }
+        }
+        return minSeqNo;
     }
 
     /**
@@ -561,7 +606,7 @@ public class Head implements Closeable {
 
             long cutoffTimestamp = head.maxTime - head.oooCutoffWindow;
             if (timestamp < cutoffTimestamp) {
-                TSDBMetrics.incrementCounter(TSDBMetrics.INGESTION.oooSamplesRejected, 1);
+                TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.oooSamplesRejected, 1);
                 failureCallback.run();
                 throw new TSDBOutOfOrderException(
                     "Sample with timestamp "

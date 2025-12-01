@@ -239,7 +239,7 @@ public class MemChunk {
             // TODO: make threshold configurable
             if (chunks.size() >= 5) {
                 mergeChunks(timestamp, value);
-                TSDBMetrics.incrementCounter(TSDBMetrics.INGESTION.oooChunksMerged, 1);
+                TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.oooChunksMerged, 1);
                 return;
             }
 
@@ -248,7 +248,7 @@ public class MemChunk {
             ChunkEntry newEntry = new ChunkEntry(newChunk, newChunk.appender());
             chunks.add(newEntry);
             newEntry.append(timestamp, value);
-            TSDBMetrics.incrementCounter(TSDBMetrics.INGESTION.oooChunksCreated, 1);
+            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.oooChunksCreated, 1);
         }
 
         /**

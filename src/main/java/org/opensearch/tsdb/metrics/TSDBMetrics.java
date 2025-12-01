@@ -12,13 +12,15 @@ import org.apache.logging.log4j.Logger;
 import org.opensearch.telemetry.metrics.Counter;
 import org.opensearch.telemetry.metrics.Histogram;
 import org.opensearch.telemetry.metrics.MetricsRegistry;
+import org.opensearch.telemetry.metrics.tags.Tags;
 
 /** TSDB metrics: counters and histograms initialized once via telemetry. */
 public class TSDBMetrics {
     private static final Logger logger = LogManager.getLogger(TSDBMetrics.class);
     private static volatile MetricsRegistry registry;
 
-    public static final TSDBIngestionMetrics INGESTION = new TSDBIngestionMetrics();
+    public static final TSDBEngineMetrics ENGINE = new TSDBEngineMetrics();
+    public static final TSDBIndexMetrics INDEX = new TSDBIndexMetrics();
     public static final TSDBAggregationMetrics AGGREGATION = new TSDBAggregationMetrics();
 
     // Public constructor for testing
@@ -42,7 +44,8 @@ public class TSDBMetrics {
         }
 
         // Initialize metrics first (may throw exception)
-        INGESTION.initialize(metricsRegistry);
+        ENGINE.initialize(metricsRegistry);
+        INDEX.initialize(metricsRegistry);
         AGGREGATION.initialize(metricsRegistry);
 
         // Only set registry after successful initialization
@@ -64,22 +67,38 @@ public class TSDBMetrics {
     }
 
     /**
-     * Safely increment a counter by a specific amount.
+     * Safely increment a counter by a specific amount without tags.
      * Provides null safety and initialization checks.
      */
     public static void incrementCounter(Counter counter, long value) {
+        incrementCounter(counter, value, Tags.EMPTY);
+    }
+
+    /**
+     * Safely increment a counter by a specific amount with tags.
+     * Provides null safety and initialization checks.
+     */
+    public static void incrementCounter(Counter counter, long value, Tags tags) {
         if (isInitialized() && counter != null) {
-            counter.add(value);
+            counter.add(value, tags);
         }
     }
 
     /**
-     * Safely record a histogram value.
+     * Safely record a histogram value without tags.
      * Provides null safety and initialization checks.
      */
     public static void recordHistogram(Histogram histogram, double value) {
+        recordHistogram(histogram, value, Tags.EMPTY);
+    }
+
+    /**
+     * Safely record a histogram value with tags.
+     * Provides null safety and initialization checks.
+     */
+    public static void recordHistogram(Histogram histogram, double value, Tags tags) {
         if (isInitialized() && histogram != null) {
-            histogram.record(value);
+            histogram.record(value, tags);
         }
     }
 
@@ -99,7 +118,8 @@ public class TSDBMetrics {
     /** Cleanup all metrics (for tests). */
     public static synchronized void cleanup() {
         registry = null;
-        INGESTION.cleanup();
+        ENGINE.cleanup();
+        INDEX.cleanup();
         AGGREGATION.cleanup();
         logger.info("TSDB metrics cleanup completed");
     }
