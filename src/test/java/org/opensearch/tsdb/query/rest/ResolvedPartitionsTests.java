@@ -38,7 +38,7 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
     public void testSingleRoutingKeyInSinglePartition() {
         RoutingKey serviceApi = new RoutingKey("service", "api");
         PartitionWindow window = new PartitionWindow("cluster1:index-a", 1000000L, 2000000L, List.of(serviceApi));
-        ResolvedPartition partition = new ResolvedPartition("fetch service:api", List.of(window));
+        ResolvedPartition partition = new ResolvedPartition("service:api", List.of(window));
         ResolvedPartitions resolvedPartitions = new ResolvedPartitions(List.of(partition));
 
         assertFalse("No partition overlap when routing key exists in only one partition", resolvedPartitions.hasOverlappingPartitions());
@@ -59,7 +59,7 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
         // Time window 2: 2M-3M (same partition, different time range)
         PartitionWindow window2 = new PartitionWindow("cluster1:index-a", 2000000L, 3000000L, List.of(serviceApi));
 
-        ResolvedPartition partition = new ResolvedPartition("fetch service:api", List.of(window1, window2));
+        ResolvedPartition partition = new ResolvedPartition("service:api", List.of(window1, window2));
         ResolvedPartitions resolvedPartitions = new ResolvedPartitions(List.of(partition));
 
         assertFalse(
@@ -83,7 +83,7 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
         // Partition 2: service:api from 2M-3M (overlaps with window1 from 2M-2.5M)
         PartitionWindow window2 = new PartitionWindow("cluster2:index-b", 2000000L, 3000000L, List.of(serviceApi));
 
-        ResolvedPartition partition = new ResolvedPartition("fetch service:api", List.of(window1, window2));
+        ResolvedPartition partition = new ResolvedPartition("service:api", List.of(window1, window2));
         ResolvedPartitions resolvedPartitions = new ResolvedPartitions(List.of(partition));
 
         assertTrue(
@@ -109,7 +109,7 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
         // Partition 2: service:api from 2M-3M (adjacent, no overlap)
         PartitionWindow window2 = new PartitionWindow("cluster2:index-b", 2000000L, 3000000L, List.of(serviceApi));
 
-        ResolvedPartition partition = new ResolvedPartition("fetch service:api", List.of(window1, window2));
+        ResolvedPartition partition = new ResolvedPartition("service:api", List.of(window1, window2));
         ResolvedPartitions resolvedPartitions = new ResolvedPartitions(List.of(partition));
 
         assertFalse(
@@ -123,7 +123,7 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
      * Expected: No temporal collision
      */
     public void testEmptyPartitionWindows() {
-        ResolvedPartition partition = new ResolvedPartition("fetch service:api", List.of());
+        ResolvedPartition partition = new ResolvedPartition("service:api", List.of());
         ResolvedPartitions resolvedPartitions = new ResolvedPartitions(List.of(partition));
 
         assertFalse("No partition overlap when there are no partition windows", resolvedPartitions.hasOverlappingPartitions());
@@ -135,7 +135,7 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
      */
     public void testEmptyRoutingKeys() {
         PartitionWindow window = new PartitionWindow("cluster1:index-a", 1000000L, 2000000L, List.of());
-        ResolvedPartition partition = new ResolvedPartition("fetch service:api", List.of(window));
+        ResolvedPartition partition = new ResolvedPartition("service:api", List.of(window));
         ResolvedPartitions resolvedPartitions = new ResolvedPartitions(List.of(partition));
 
         assertFalse("No partition overlap when there are no routing keys", resolvedPartitions.hasOverlappingPartitions());
@@ -159,7 +159,7 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
         // Partition 2: service:web from 1.5M-2.5M (overlaps in TIME, but different routing key)
         PartitionWindow window2 = new PartitionWindow("cluster2:index-b", 1500000L, 2500000L, List.of(serviceWeb));
 
-        ResolvedPartition partition = new ResolvedPartition("fetch service:*", List.of(window1, window2));
+        ResolvedPartition partition = new ResolvedPartition("service:*", List.of(window1, window2));
         ResolvedPartitions resolvedPartitions = new ResolvedPartitions(List.of(partition));
 
         assertFalse(
@@ -179,11 +179,11 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
         // Fetch statement 1: service:api spans multiple partitions (HAS COLLISION)
         PartitionWindow window1a = new PartitionWindow("cluster1:index-a", 1000000L, 2000000L, List.of(serviceApi));
         PartitionWindow window1b = new PartitionWindow("cluster2:index-b", 1000000L, 2000000L, List.of(serviceApi));
-        ResolvedPartition partition1 = new ResolvedPartition("fetch service:api", List.of(window1a, window1b));
+        ResolvedPartition partition1 = new ResolvedPartition("service:api", List.of(window1a, window1b));
 
         // Fetch statement 2: service:web in single partition (no collision)
         PartitionWindow window2 = new PartitionWindow("cluster3:index-c", 1000000L, 2000000L, List.of(serviceWeb));
-        ResolvedPartition partition2 = new ResolvedPartition("fetch service:web", List.of(window2));
+        ResolvedPartition partition2 = new ResolvedPartition("service:web", List.of(window2));
 
         ResolvedPartitions resolvedPartitions = new ResolvedPartitions(List.of(partition1, partition2));
 
@@ -203,7 +203,7 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
         PartitionWindow window2 = new PartitionWindow("cluster2:index-b", 1000000L, 2000000L, List.of(serviceApi));
         PartitionWindow window3 = new PartitionWindow("cluster1:index-a", 2000000L, 3000000L, List.of(serviceApi)); // Duplicate
 
-        ResolvedPartition partition = new ResolvedPartition("fetch service:api", List.of(window1, window2, window3));
+        ResolvedPartition partition = new ResolvedPartition("service:api", List.of(window1, window2, window3));
         ResolvedPartitions resolvedPartitions = new ResolvedPartitions(List.of(partition));
 
         List<String> partitionIds = resolvedPartitions.getAllPartitionIds();
@@ -224,9 +224,9 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
 
         // Null fetch statement and partition windows
         ResolvedPartition partition = new ResolvedPartition(null, null);
-        assertEquals("", partition.getFetchStatement());
-        assertNotNull(partition.getPartitionWindows());
-        assertTrue(partition.getPartitionWindows().isEmpty());
+        assertEquals("", partition.fetchStatement());
+        assertNotNull(partition.partitionWindows());
+        assertTrue(partition.partitionWindows().isEmpty());
 
         // Null partition ID and routing keys
         PartitionWindow window = new PartitionWindow(null, 0L, 0L, null);
@@ -251,7 +251,7 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
             {
               "partitions": [
                 {
-                  "fetch_statement": "fetch service:api",
+                  "fetch_statement": "service:api",
                   "partition_windows": [
                     {
                       "partition_id": "cluster1:index-a",
@@ -272,7 +272,7 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
                   ]
                 },
                 {
-                  "fetch_statement": "fetch service:web",
+                  "fetch_statement": "service:web",
                   "partition_windows": [
                     {
                       "partition_id": "cluster3:index-c",
@@ -295,12 +295,71 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
             assertEquals(2, resolvedPartitions.getPartitions().size());
 
             ResolvedPartition partition1 = resolvedPartitions.getPartitions().get(0);
-            assertEquals("fetch service:api", partition1.getFetchStatement());
-            assertEquals(2, partition1.getPartitionWindows().size());
+            assertEquals("service:api", partition1.fetchStatement());
+            assertEquals(2, partition1.partitionWindows().size());
 
             ResolvedPartition partition2 = resolvedPartitions.getPartitions().get(1);
-            assertEquals("fetch service:web", partition2.getFetchStatement());
-            assertEquals(1, partition2.getPartitionWindows().size());
+            assertEquals("service:web", partition2.fetchStatement());
+            assertEquals(1, partition2.partitionWindows().size());
+        }
+    }
+
+    /**
+     * Test parsing complete ResolvedPartitions structure from XContent.
+     * This exercises the full parsing hierarchy: ResolvedPartitions -> ResolvedPartition -> PartitionWindow -> RoutingKey.
+     */
+    public void testParseResolvedPartitionsComplete_isoTimestamp() throws IOException {
+        String json = """
+            {
+              "partitions": [
+                {
+                  "fetch_statement": "service:k8s-resource-controller",
+                  "partition_windows": [
+                    {
+                      "partition_id": "cluster1:index-2d",
+                      "start": "2025-12-13T00:44:49Z",
+                      "end": "2025-12-13T02:14:49Z",
+                      "routing_keys": [
+                        {
+                          "key": "region",
+                          "value": "dca"
+                        }
+                      ]
+                    },
+                    {
+                      "partition_id": "cluster1:index-2d-logging-frontend",
+                      "start": "2025-12-13T00:44:49Z",
+                      "end": "2025-12-13T02:14:49Z",
+                      "routing_keys": [
+                        {
+                          "key": "region",
+                          "value": "dca"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {
+            ResolvedPartitions resolvedPartitions = ResolvedPartitions.parse(parser);
+
+            assertNotNull(resolvedPartitions);
+            assertEquals(1, resolvedPartitions.getPartitions().size());
+
+            ResolvedPartition partition1 = resolvedPartitions.getPartitions().get(0);
+            assertEquals("service:k8s-resource-controller", partition1.fetchStatement());
+            assertEquals(2, partition1.partitionWindows().size());
+
+            // check partition start/end timestamps
+            PartitionWindow window1 = partition1.partitionWindows().get(0);
+            assertEquals(1765586689000L, window1.startMs());
+            assertEquals(1765592089000L, window1.endMs());
+
+            PartitionWindow window2 = partition1.partitionWindows().get(1);
+            assertEquals(1765586689000L, window2.startMs());
+            assertEquals(1765592089000L, window2.endMs());
         }
     }
 
@@ -330,7 +389,7 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
             {
               "partitions": [
                 {
-                  "fetch_statement": "fetch service:k8s-resource-controller",
+                  "fetch_statement": "service:k8s-resource-controller",
                   "partition_windows": [
                     {
                       "partition_id": "cluster1:index-2d",
@@ -363,24 +422,88 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
             assertEquals(1, resolvedPartitions.getPartitions().size());
 
             ResolvedPartition partition = resolvedPartitions.getPartitions().get(0);
-            assertEquals("fetch service:k8s-resource-controller", partition.getFetchStatement());
-            assertEquals(2, partition.getPartitionWindows().size());
+            assertEquals("service:k8s-resource-controller", partition.fetchStatement());
+            assertEquals(2, partition.partitionWindows().size());
 
             // First window: has explicit end timestamp
-            PartitionWindow window1 = partition.getPartitionWindows().get(0);
+            PartitionWindow window1 = partition.partitionWindows().get(0);
             assertEquals("cluster1:index-2d", window1.partitionId());
             assertEquals(1731003630000L, window1.startMs());
             assertEquals(1731010000000L, window1.endMs()); // Explicit end value
             assertEquals(1, window1.routingKeys().size());
 
             // Second window: missing end field, should default to nowMs (our fixed time)
-            PartitionWindow window2 = partition.getPartitionWindows().get(1);
+            PartitionWindow window2 = partition.partitionWindows().get(1);
             assertEquals("cluster2:index-2d", window2.partitionId());
             assertEquals(1731005000000L, window2.startMs());
             assertEquals(fixedNowMs, window2.endMs()); // Should equal our fixed time
             assertEquals(1, window2.routingKeys().size());
+        }
+    }
 
+    /**
+     * Test parsing partition windows with nil/missing end timestamp.
+     */
+    public void testParsePartitionWindowsWithMissingEndTimestamp_isoTimestamp() throws IOException {
+        String json = """
+            {
+              "partitions": [
+                {
+                  "fetch_statement": "service:k8s-resource-controller",
+                  "partition_windows": [
+                    {
+                      "partition_id": "cluster1:index-2d",
+                      "start": "2025-12-13T00:44:49Z",
+                      "routing_keys": [
+                        {
+                          "key": "region",
+                          "value": "dca"
+                        }
+                      ]
+                    },
+                    {
+                      "partition_id": "cluster2:index-2d",
+                      "start": "2025-12-13T00:44:49Z",
+                      "routing_keys": [
+                        {
+                          "key": "region",
+                          "value": "dca"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        // Use a fixed time supplier for deterministic test behavior
+        long fixedNowMs = 1765592089001L;
+
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {
+            ResolvedPartitions resolvedPartitions = ResolvedPartitions.parse(parser, () -> fixedNowMs);
+
+            assertNotNull(resolvedPartitions);
+            assertEquals(1, resolvedPartitions.getPartitions().size());
             assertTrue("There should be collision", resolvedPartitions.hasOverlappingPartitions());
+
+            ResolvedPartition partition = resolvedPartitions.getPartitions().get(0);
+            assertEquals("service:k8s-resource-controller", partition.fetchStatement());
+            assertEquals(2, partition.partitionWindows().size());
+
+            // First window: has explicit end timestamp
+            PartitionWindow window1 = partition.partitionWindows().get(0);
+            assertEquals("cluster1:index-2d", window1.partitionId());
+            assertEquals(1765586689000L, window1.startMs());
+            assertEquals(fixedNowMs, window1.endMs()); // Explicit end value
+            assertEquals(1, window1.routingKeys().size());
+
+            // Second window: missing end field, should default to nowMs (our fixed time)
+            PartitionWindow window2 = partition.partitionWindows().get(1);
+            assertEquals("cluster2:index-2d", window2.partitionId());
+            assertEquals(1765586689000L, window2.startMs());
+            assertEquals(fixedNowMs, window2.endMs()); // Should equal our fixed time
+            assertEquals(1, window2.routingKeys().size());
         }
     }
 
@@ -392,10 +515,10 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
             {
               "partitions": [
                 {
-                  "fetch_statement": "fetch name:quota_status.requests.memory resources-type:total",
+                  "fetch_statement": "name:quota_status.requests.memory resources-type:total",
                   "partition_windows": [
                     {
-                      "partition_id": "cluster1:opensearch-ts-poc-2-staging-data-dca-tc:2d",
+                      "partition_id": "cluster1:index-2d",
                       "start": 1731003630000,
                       "routing_keys": [
                         {"key": "region", "value": "dca"},
@@ -405,10 +528,10 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
                   ]
                 },
                 {
-                  "fetch_statement": "fetch name:quota_status.requests.memory resources-type:used",
+                  "fetch_statement": "name:quota_status.requests.memory resources-type:used",
                   "partition_windows": [
                     {
-                      "partition_id": "cluster1:opensearch-ts-poc-2-staging-data-dca-tc:2d",
+                      "partition_id": "cluster1:index-2d",
                       "start": 1731003630000,
                       "routing_keys": [
                         {"key": "region", "value": "dca"},
@@ -432,22 +555,22 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
 
             // First fetch statement
             ResolvedPartition partition1 = resolvedPartitions.getPartitions().get(0);
-            assertEquals("fetch name:quota_status.requests.memory resources-type:total", partition1.getFetchStatement());
-            assertEquals(1, partition1.getPartitionWindows().size());
+            assertEquals("name:quota_status.requests.memory resources-type:total", partition1.fetchStatement());
+            assertEquals(1, partition1.partitionWindows().size());
 
-            PartitionWindow window1 = partition1.getPartitionWindows().get(0);
-            assertEquals("cluster1:opensearch-ts-poc-2-staging-data-dca-tc:2d", window1.partitionId());
+            PartitionWindow window1 = partition1.partitionWindows().get(0);
+            assertEquals("cluster1:index-2d", window1.partitionId());
             assertEquals(1731003630000L, window1.startMs());
             assertEquals(fixedNowMs, window1.endMs()); // Should equal our fixed time
             assertEquals(2, window1.routingKeys().size());
 
             // Second fetch statement
             ResolvedPartition partition2 = resolvedPartitions.getPartitions().get(1);
-            assertEquals("fetch name:quota_status.requests.memory resources-type:used", partition2.getFetchStatement());
-            assertEquals(1, partition2.getPartitionWindows().size());
+            assertEquals("name:quota_status.requests.memory resources-type:used", partition2.fetchStatement());
+            assertEquals(1, partition2.partitionWindows().size());
 
-            PartitionWindow window2 = partition2.getPartitionWindows().get(0);
-            assertEquals("cluster1:opensearch-ts-poc-2-staging-data-dca-tc:2d", window2.partitionId());
+            PartitionWindow window2 = partition2.partitionWindows().get(0);
+            assertEquals("cluster1:index-2d", window2.partitionId());
             assertEquals(1731003630000L, window2.startMs());
             assertEquals(fixedNowMs, window2.endMs()); // Should equal our fixed time
             assertEquals(2, window2.routingKeys().size());
@@ -457,6 +580,42 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
             assertEquals("Both partition windows should use the same nowMs reference time", window1.endMs(), window2.endMs());
 
             assertFalse("There should be no collision", resolvedPartitions.hasOverlappingPartitions());
+        }
+    }
+
+    /**
+     * Test invalid timestamp field throws error.
+     */
+    public void testParsePartitionWindowsWithInvalidField_timestamp() throws IOException {
+        String json = """
+            {
+              "partitions": [
+                {
+                  "fetch_statement": "service:k8s-resource-controller",
+                  "partition_windows": [
+                    {
+                      "partition_id": "cluster1:index-2d",
+                      "start": {
+                        "seconds": 1765592089
+                      },
+                      "routing_keys": [
+                        {
+                          "key": "region",
+                          "value": "dca"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        // Use a fixed time supplier for deterministic test behavior
+        long fixedNowMs = 1765592089001L;
+
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {
+            assertThrows(IOException.class, () -> ResolvedPartitions.parse(parser, () -> fixedNowMs));
         }
     }
 }

@@ -60,6 +60,16 @@ curl -X PUT -H 'Content-Type: application/json' http://localhost:9200/my-index -
 }'
 ```
 
+Add debug log level to cluster settings
+```bash
+curl -X PUT -H 'Content-Type: application/json' http://localhost:9200/_cluster/settings --data '{
+  "transient": {
+    "logger.org.opensearch.tsdb.query.rest": "DEBUG"
+  }
+}'
+
+```
+
 ## Index some metrics
 ### bulk request using flat-json format
 Expected json schema
@@ -387,6 +397,41 @@ curl -X GET "localhost:9200/_m3ql?start=1633072700000&end=1633076400000" -H 'Con
 ```
 ```bash
 curl -X GET "localhost:9200/_m3ql?explain=false&start=1633072700000&end=1633076400000" -H 'Content-Type: application/json' -d'{"query": "fetch __name__:http_requests_total | sum handler method | moving 1h sum | aliasByTags handler method"}'| jq
+```
+
+### With federation routing partition metadata
+Note: the RestM3QlAction handler may be routing requests based on `partitions` query param, but making `pushdown=true|false` decision based on the presence of `resolved_partitions` in the request body. Check the code for latest behavior.
+```bash
+curl -X GET "localhost:9200/_m3ql?explain=false&start=1633072700000&end=1633076400000&partitions=my-index" -H 'Content-Type: application/json' -d '{
+    "query": "fetch __name__:http_requests_total | sum handler method | moving 1h sum | aliasByTags handler method",
+    "resolved_partitions": {
+      "partitions": [
+        {
+          "fetch_statement": "__name__:http_requests_total",
+          "partition_windows": [
+            {
+              "partition_id": "cluster1:index-a",
+              "start": "2025-12-13T00:44:49Z",
+              "end": "2025-12-13T02:14:49Z",
+              "routing_keys": [
+                { "key": "service", "value": "api" },
+                { "key": "region", "value": "us-west" }
+              ]
+            },
+            {
+              "partition_id": "cluster2:index-b",
+              "start": "2025-12-13T00:44:49Z",
+              "end": "2025-12-13T02:14:49Z",
+              "routing_keys": [
+                { "key": "service", "value": "api" },
+                { "key": "region", "value": "us-west" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }' | jq
 ```
 
 Execute with profile:true to get debug info from the TimeSeriesUnfoldAggregator

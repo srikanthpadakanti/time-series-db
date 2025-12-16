@@ -7,6 +7,7 @@
  */
 package org.opensearch.tsdb.query.rest;
 
+import org.apache.logging.log4j.core.config.Configurator;
 import org.mockito.ArgumentCaptor;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
@@ -69,6 +70,9 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         mockClient = setupMockClientWithAssertion(searchRequest -> {
             // No-op assertion - just let the request pass through
         });
+
+        // Enable debug logging for code cov
+        Configurator.setLevel(RestM3QLAction.class.getName(), org.apache.logging.log4j.Level.DEBUG);
     }
 
     /**

@@ -139,10 +139,10 @@ public class RestQueryExecutor extends BaseQueryExecutor {
 
                 for (var partition : queryConfig.resolvedPartitions().getPartitions()) {
                     builder.startObject();
-                    builder.field(FIELD_FETCH_STATEMENT, partition.getFetchStatement());
+                    builder.field(FIELD_FETCH_STATEMENT, partition.fetchStatement());
                     builder.startArray(FIELD_PARTITION_WINDOWS);
 
-                    for (var window : partition.getPartitionWindows()) {
+                    for (var window : partition.partitionWindows()) {
                         builder.startObject();
                         builder.field(FIELD_PARTITION_ID, window.partitionId());
                         builder.field(FIELD_START, window.startMs());

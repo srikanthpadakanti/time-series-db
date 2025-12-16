@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.query.rest;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.time.DateFormatter;
 import org.opensearch.common.time.DateMathParser;
@@ -69,12 +71,12 @@ import static org.opensearch.rest.RestRequest.Method.POST;
  *   "resolved_partitions": {
  *     "partitions": [
  *       {
- *         "fetch_statement": "fetch service:api",
+ *         "fetch_statement": "service:api",
  *         "partition_windows": [
  *           {
  *             "partition_id": "cluster1:index-a",
- *             "start": 1000000,
- *             "end": 2000000,
+ *             "start": "2025-12-13T00:44:49Z",
+ *             "end": "2025-12-13T02:14:49Z",
  *             "routing_keys": [
  *               {"key": "service", "value": "api"},
  *               {"key": "region", "value": "us-west"}
@@ -94,8 +96,9 @@ import static org.opensearch.rest.RestRequest.Method.POST;
  * @see PromMatrixResponseListener
  */
 public class RestM3QLAction extends BaseRestHandler {
-
     public static final String NAME = "m3ql_action";
+
+    private static final Logger logger = LogManager.getLogger(RestM3QLAction.class);
 
     // Route path
     private static final String BASE_M3QL_PATH = "/_m3ql";
@@ -166,6 +169,21 @@ public class RestM3QLAction extends BaseRestHandler {
             try {
                 params = parseRequestParams(request);
                 tags.addTag("explain", params.explain()).addTag("pushdown", params.pushdown());
+                if (logger.isDebugEnabled()) {
+                    logger.debug(
+                        "Received M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}",
+                        params.query,
+                        params.startMs,
+                        params.endMs,
+                        params.stepMs,
+                        Strings.arrayToCommaDelimitedString(params.indices),
+                        params.explain,
+                        params.pushdown,
+                        params.profile,
+                        params.includeMetadata,
+                        params.federationMetadata()
+                    );
+                }
             } catch (IllegalArgumentException e) {
                 tags.addTag("reached_step", "error__parse_request_params");
                 return channel -> {
@@ -296,6 +314,12 @@ public class RestM3QLAction extends BaseRestHandler {
     private RequestBody parseRequestBody(RestRequest request) throws IOException {
         if (!request.hasContent()) {
             return null;
+        }
+
+        if (logger.isDebugEnabled()) {
+            try {
+                logger.debug("Parsing request body: {}", request.content().utf8ToString());
+            } catch (Throwable ignore) {}
         }
 
         try (XContentParser parser = request.contentParser()) {

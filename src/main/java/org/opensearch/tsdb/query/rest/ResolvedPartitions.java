@@ -11,6 +11,7 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.tsdb.query.federation.FederationMetadata;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -127,7 +128,7 @@ public class ResolvedPartitions implements FederationMetadata {
     public boolean hasOverlappingPartitions() {
         // Check for collision per fetch statement (ResolvedPartition) independently
         for (ResolvedPartition partition : partitions) {
-            if (hasTemporalCollisionInWindows(partition.getPartitionWindows())) {
+            if (hasTemporalCollisionInWindows(partition.partitionWindows())) {
                 return true;
             }
         }
@@ -230,7 +231,7 @@ public class ResolvedPartitions implements FederationMetadata {
     public List<String> getAllPartitionIds() {
         Set<String> partitionIds = new HashSet<>();
         for (ResolvedPartition partition : partitions) {
-            for (PartitionWindow window : partition.getPartitionWindows()) {
+            for (PartitionWindow window : partition.partitionWindows()) {
                 partitionIds.add(window.partitionId());
             }
         }
@@ -238,39 +239,28 @@ public class ResolvedPartitions implements FederationMetadata {
     }
 
     /**
-     * Represents a single resolved partition with its fetch statement and time windows.
-     */
-    public static class ResolvedPartition {
+         * Represents a single resolved partition with its fetch statement and time windows.
+         */
+    public record ResolvedPartition(String fetchStatement, List<PartitionWindow> partitionWindows) {
         private static final String FIELD_FETCH_STATEMENT = "fetch_statement";
         private static final String FIELD_PARTITION_WINDOWS = "partition_windows";
-
-        private final String fetchStatement;
-        private final List<PartitionWindow> partitionWindows;
 
         /**
          * Constructs a ResolvedPartition instance.
          *
-         * @param fetchStatement the M3QL fetch statement for this partition
+         * @param fetchStatement   the M3QL fetch statement for this partition
          * @param partitionWindows list of partition windows with time ranges and routing keys
          */
-        public ResolvedPartition(String fetchStatement, List<PartitionWindow> partitionWindows) {
-            this.fetchStatement = fetchStatement != null ? fetchStatement : "";
-            this.partitionWindows = partitionWindows != null ? partitionWindows : List.of();
-        }
-
-        public String getFetchStatement() {
-            return fetchStatement;
-        }
-
-        public List<PartitionWindow> getPartitionWindows() {
-            return partitionWindows;
+        public ResolvedPartition {
+            fetchStatement = fetchStatement != null ? fetchStatement : "";
+            partitionWindows = partitionWindows != null ? partitionWindows : List.of();
         }
 
         /**
          * Parses ResolvedPartition from XContent.
          *
          * @param parser the XContent parser
-         * @param nowMs reference time in milliseconds for nil/missing end timestamps
+         * @param nowMs  reference time in milliseconds for nil/missing end timestamps
          * @return parsed ResolvedPartition instance
          * @throws IOException if parsing fails
          */
@@ -300,7 +290,7 @@ public class ResolvedPartitions implements FederationMetadata {
     /**
      * Represents a time window for a specific partition with associated routing keys.
      *
-     * @param partitionId identifier in format "cluster:index"
+     * @param partitionId identifier in CCS format "cluster:index"
      * @param startMs start timestamp in milliseconds
      * @param endMs end timestamp in milliseconds
      * @param routingKeys list of routing keys for pushdown optimization
@@ -342,10 +332,10 @@ public class ResolvedPartitions implements FederationMetadata {
                     currentFieldName = parser.currentName();
                 } else if (token == XContentParser.Token.VALUE_STRING && FIELD_PARTITION_ID.equals(currentFieldName)) {
                     partitionId = parser.text();
-                } else if (token == XContentParser.Token.VALUE_NUMBER && FIELD_START.equals(currentFieldName)) {
-                    startMs = parser.longValue();
-                } else if (token == XContentParser.Token.VALUE_NUMBER && FIELD_END.equals(currentFieldName)) {
-                    endMs = parser.longValue();
+                } else if (FIELD_START.equals(currentFieldName)) {
+                    startMs = parseTimestampToken(parser, token);
+                } else if (FIELD_END.equals(currentFieldName)) {
+                    endMs = parseTimestampToken(parser, token);
                 } else if (token == XContentParser.Token.START_ARRAY && FIELD_ROUTING_KEYS.equals(currentFieldName)) {
                     while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
                         routingKeys.add(RoutingKey.parse(parser));
@@ -362,8 +352,8 @@ public class ResolvedPartitions implements FederationMetadata {
      *
      * <p>Examples:
      * <ul>
-     *   <li>dc:dca60 -> region:dca (federated preprocessing)</li>
-     *   <li>service:esdock -> service:esdock (direct mapping)</li>
+     *   <li>region:us-west-1</li>
+     *   <li>service:k8s-resource-controller</li>
      * </ul>
      *
      * @param key the routing key name (e.g., "service", "region")
@@ -410,5 +400,27 @@ public class ResolvedPartitions implements FederationMetadata {
 
             return new RoutingKey(key, value);
         }
+    }
+
+    /**
+     * Parses a timestamp token from XContentParser, handling both ISO 8601 strings and numeric milliseconds.
+     * For VALUE_STRING, expects an ISO 8601 date string in UTC format (e.g. "2025-12-13T00:44:49Z").
+     * For VALUE_NUMBER, expects milliseconds since epoch (e.g. 1765586689000) .
+     */
+    static long parseTimestampToken(XContentParser parser, XContentParser.Token token) throws IOException {
+        if (token == XContentParser.Token.VALUE_STRING) {
+            // Parse ISO 8601 date string to milliseconds
+            String isoDateTime = parser.text();
+            return Instant.parse(isoDateTime).toEpochMilli();
+        } else if (token == XContentParser.Token.VALUE_NUMBER) {
+            return parser.longValue();
+        } else {
+            throw new IOException("Invalid timestamp token: " + token);
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "ResolvedPartitions{" + "partitions=" + partitions + '}';
     }
 }
