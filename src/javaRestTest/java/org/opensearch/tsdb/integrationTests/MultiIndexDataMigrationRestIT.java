@@ -20,6 +20,8 @@ import org.opensearch.tsdb.framework.RestTimeSeriesTestFramework;
 public class MultiIndexDataMigrationRestIT extends RestTimeSeriesTestFramework {
 
     private static final String TEST_YAML = "test_cases/multi_index_data_migration_rest_it.yaml";
+    private static final String PUSHDOWN_COMPARISON_TEST_YAML = "test_cases/multi_index_pushdown_comparison_rest_it.yaml";
+    private static final String OVERLAPPING_WINDOWS_TEST_YAML = "test_cases/multi_index_overlapping_windows_rest_it.yaml";
 
     /**
      * Tests moving window aggregation across data split between two indices.
@@ -31,6 +33,38 @@ public class MultiIndexDataMigrationRestIT extends RestTimeSeriesTestFramework {
      */
     public void testDataMigrationWithMovingSum() throws Exception {
         initializeTest(TEST_YAML);
+        runBasicTest();
+    }
+
+    /**
+     * Tests that queries with and without pushdown produce identical results across multiple indices.
+     *
+     * Validates:
+     * - Simple sum aggregation works correctly with pushdown enabled
+     * - Simple sum aggregation works correctly with pushdown disabled
+     * - Both produce identical results matching expected values
+     */
+    public void testPushdownComparison() throws Exception {
+        initializeTest(PUSHDOWN_COMPARISON_TEST_YAML);
+        runBasicTest();
+    }
+
+    /**
+     * Tests realistic multi-index scenario with overlapping time windows using generic metrics.
+     *
+     * Simulates data migration where:
+     * - Old index contains data from 00:00 to 00:40
+     * - New index contains data from 00:20 to 01:00
+     * - During overlap (00:20-00:40), timestamps are split between indices
+     * - Each timestamp exists in only one index (no duplicate timestamps)
+     *
+     * Validates:
+     * - Queries with pushdown correctly merge data from both indices
+     * - Queries without pushdown produce identical results
+     * - Overlapping time windows are handled correctly
+     */
+    public void testOverlappingTimeWindows() throws Exception {
+        initializeTest(OVERLAPPING_WINDOWS_TEST_YAML);
         runBasicTest();
     }
 }

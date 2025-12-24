@@ -127,6 +127,11 @@ public class RestQueryExecutor extends BaseQueryExecutor {
             url = url + "&partitions=" + indexName;
         }
 
+        // Add pushdown parameter if explicitly disabled in query config
+        if (queryConfig.isDisablePushdown()) {
+            url = url + "&pushdown=false";
+        }
+
         Request request = new Request(RestRequest.Method.POST.name(), url);
 
         try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
