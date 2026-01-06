@@ -7,9 +7,9 @@
  */
 package org.opensearch.tsdb.core.index.metadata;
 
-import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexCommit;
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.index.SnapshotDeletionPolicy;
 import org.apache.lucene.store.Directory;
 
@@ -54,11 +54,8 @@ public class SeriesMetadataManager {
      * @throws IOException if commit fails
      */
     public void commitWithMetadata(Map<Long, Long> metadata) throws IOException {
-        // Write metadata file BEFORE commit (so it exists when commit references it)
-        long nextGeneration;
-        try (DirectoryReader reader = DirectoryReader.open(indexWriter)) {
-            nextGeneration = reader.getIndexCommit().getGeneration() + 1;
-        }
+        // Get next generation from directory state directly
+        long nextGeneration = SegmentInfos.getLastCommitGeneration(directory) + 1;
 
         String metadataFilename = SeriesMetadataIO.writeMetadata(directory, nextGeneration, metadata);
 
@@ -156,24 +153,32 @@ public class SeriesMetadataManager {
      *
      * @throws IOException if cleanup fails
      */
-    private void cleanupOldMetadataFiles() throws IOException {
-        // Get current generation from last commit
-        try (DirectoryReader reader = DirectoryReader.open(indexWriter)) {
-            long currentGeneration = reader.getIndexCommit().getGeneration();
-            String currentMetadataFile = SeriesMetadataIO.generateFilename(currentGeneration);
-
-            // Collect protected files (from active snapshots)
-            Set<String> protectedFiles = activeSnapshots.values()
-                .stream()
-                .map(MetadataAwareIndexCommit::getMetadataFilename)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-            // Always protect current file
-            protectedFiles.add(currentMetadataFile);
-
-            // Delete all metadata files NOT in protected set
-            SeriesMetadataIO.cleanupOldFiles(directory, protectedFiles);
+    void cleanupOldMetadataFiles() throws IOException {
+        // Get current metadata filename from commit data (source of truth)
+        Iterable<Map.Entry<String, String>> commitData = indexWriter.getLiveCommitData();
+        String currentMetadataFile = null;
+        if (commitData != null) {
+            for (Map.Entry<String, String> entry : commitData) {
+                if (entry.getKey().equals(SERIES_METADATA_FILE_KEY)) {
+                    currentMetadataFile = entry.getValue();
+                    break;
+                }
+            }
         }
+
+        // Collect protected files (from active snapshots)
+        Set<String> protectedFiles = activeSnapshots.values()
+            .stream()
+            .map(MetadataAwareIndexCommit::getMetadataFilename)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+
+        // Always protect current file if it exists
+        if (currentMetadataFile != null) {
+            protectedFiles.add(currentMetadataFile);
+        }
+
+        // Delete all metadata files NOT in protected set
+        SeriesMetadataIO.cleanupOldFiles(directory, protectedFiles);
     }
 }

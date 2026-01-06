@@ -285,4 +285,53 @@ public class SeriesMetadataManagerTests extends OpenSearchTestCase {
             }
         }
     }
+
+    /**
+     * Test that cleanupOldMetadataFiles protects the file referenced in commit data,
+     * even if there's a generation mismatch between segments_N and the metadata file.
+     */
+    public void testCleanupProtectsCommitDataFileWithGenerationMismatch() throws IOException {
+        Path tempDir = createTempDir();
+        try (Directory dir = new MMapDirectory(tempDir)) {
+            IndexWriterConfig iwc = new IndexWriterConfig(new WhitespaceAnalyzer());
+            IndexDeletionPolicy baseDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy();
+            SnapshotDeletionPolicy snapshotDeletionPolicy = new SnapshotDeletionPolicy(baseDeletionPolicy);
+            iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
+
+            try (IndexWriter writer = new IndexWriter(dir, iwc)) {
+                SeriesMetadataManager manager = new SeriesMetadataManager(dir, writer, snapshotDeletionPolicy);
+
+                // Commit 1 - creates series_metadata_1
+                manager.commitWithMetadata(Map.of(1L, 100L));
+
+                // Manually create a metadata file with generation 6 (simulating the mismatch)
+                String mismatchedFile = SeriesMetadataIO.writeMetadata(dir, 6L, Map.of(99L, 9900L));
+
+                // Create orphan files that should be cleaned up
+                String orphan1 = SeriesMetadataIO.writeMetadata(dir, 10L, Map.of(88L, 8800L));
+                String orphan2 = SeriesMetadataIO.writeMetadata(dir, 11L, Map.of(77L, 7700L));
+
+                // Update commit data to point to the mismatched file
+                // This simulates a commit where segments_N points to series_metadata_6 (mismatched generation)
+                Map<String, String> commitData = new HashMap<>();
+                commitData.put("live_series_metadata_file", mismatchedFile);
+                writer.setLiveCommitData(commitData.entrySet(), false);
+                writer.commit();
+
+                // Verify all files exist before cleanup
+                List<String> allFiles = SeriesMetadataIO.listMetadataFiles(dir);
+                assertTrue("Mismatched file should exist", allFiles.contains(mismatchedFile));
+                assertTrue("Orphan1 should exist", allFiles.contains(orphan1));
+                assertTrue("Orphan2 should exist", allFiles.contains(orphan2));
+
+                manager.cleanupOldMetadataFiles();
+
+                // Verify cleanup behavior
+                List<String> filesAfterCleanup = SeriesMetadataIO.listMetadataFiles(dir);
+                assertTrue("Metadata file from commit should be protected", filesAfterCleanup.contains(mismatchedFile));
+                assertFalse("Orphan1 should be cleaned up", filesAfterCleanup.contains(orphan1));
+                assertFalse("Orphan2 should be cleaned up", filesAfterCleanup.contains(orphan2));
+            }
+        }
+    }
 }
