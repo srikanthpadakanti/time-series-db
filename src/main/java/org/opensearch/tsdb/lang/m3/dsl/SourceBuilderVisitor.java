@@ -334,11 +334,11 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             stageStack.push(new CopyStage());
         } else {
             TimeSeriesUnfoldAggregationBuilder unfoldPipelineAggregationBuilder = new TimeSeriesUnfoldAggregationBuilder(
-                    unfoldName,
-                    unfoldStages,
-                    fetchTimeRange.start(),
-                    fetchTimeRange.end(),
-                    params.step()
+                unfoldName,
+                unfoldStages,
+                fetchTimeRange.start(),
+                fetchTimeRange.end(),
+                params.step()
             );
 
             // Set the unfold aggregation builder for the FetchPlanNode

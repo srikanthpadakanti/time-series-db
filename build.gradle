@@ -323,7 +323,7 @@ jacocoTestCoverageVerification {
 }
 
 
-tasks.named("precommit").configure { dependsOn("spotlessCheck", "javadoc") }
+tasks.named("precommit").configure { dependsOn("spotlessApply", "javadoc") }
 tasks.named("check").configure { dependsOn(jacocoTestCoverageVerification) }
 
 /**********************************************

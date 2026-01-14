@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
 package org.opensearch.tsdb.benchmark;
 
 import org.openjdk.jmh.annotations.Benchmark;
@@ -37,10 +44,10 @@ import java.util.concurrent.TimeUnit;
 @Measurement(iterations = 1, time = 5, timeUnit = TimeUnit.SECONDS)
 @Fork(value = 1, jvmArgs = { "-Xms4g", "-Xmx4g", "-XX:+HeapDumpOnOutOfMemoryError" })
 public class CachingUnfoldAggregationBenchmark extends BaseTSDBBenchmark {
-    @Param({"100", "10000" })
+    @Param({ "100", "10000" })
     public int cardinality;
 
-    @Param({"20" })
+    @Param({ "20" })
     public int sampleCount;
 
     @Param({ "20" })
@@ -55,78 +62,58 @@ public class CachingUnfoldAggregationBenchmark extends BaseTSDBBenchmark {
     public void setup() throws IOException {
         setupBenchmark(this.cardinality, this.sampleCount, this.labelCount);
         aggregationBuilderNoCache = new GlobalAggregationBuilder("aggregation_no_cache");
-        aggregationBuilderNoCache
-                .subAggregation(new TimeSeriesUnfoldAggregationBuilder(
-                        "unfold_a",
-                        List.of(new ScaleStage(2.0)),
-                        MIN_TS,
-                        maxTs,
-                        STEP
-                ))
-                .subAggregation(new TimeSeriesUnfoldAggregationBuilder(
-                        "unfold_b",
-                        List.of(new ScaleStage(2.0)),
-                        MIN_TS,
-                        maxTs,
-                        STEP
-                ))
-                .subAggregation(new TimeSeriesCoordinatorAggregationBuilder(
-                        "final",
-                        List.of(new UnionStage("unfold_b")),
-                        new LinkedHashMap<>(),
-                        Map.of("unfold_a", "unfold_a", "unfold_b", "unfold_b"),
-                        "unfold_a"
-                ));
+        aggregationBuilderNoCache.subAggregation(
+            new TimeSeriesUnfoldAggregationBuilder("unfold_a", List.of(new ScaleStage(2.0)), MIN_TS, maxTs, STEP)
+        )
+            .subAggregation(new TimeSeriesUnfoldAggregationBuilder("unfold_b", List.of(new ScaleStage(2.0)), MIN_TS, maxTs, STEP))
+            .subAggregation(
+                new TimeSeriesCoordinatorAggregationBuilder(
+                    "final",
+                    List.of(new UnionStage("unfold_b")),
+                    new LinkedHashMap<>(),
+                    Map.of("unfold_a", "unfold_a", "unfold_b", "unfold_b"),
+                    "unfold_a"
+                )
+            );
 
         aggregationBuilderWithCache = new GlobalAggregationBuilder("aggregation_with_cache");
-        aggregationBuilderWithCache
-                .subAggregation(new TimeSeriesUnfoldAggregationBuilder(
-                        "unfold_a",
-                        List.of(new ScaleStage(2.0)),
-                        MIN_TS,
-                        maxTs,
-                        STEP
-                ))
-                .subAggregation(new TimeSeriesCoordinatorAggregationBuilder(
-                        "copy_a",
-                        List.of(new CopyStage()),
-                        new LinkedHashMap<>(),
-                        Map.of("unfold_a", "unfold_a"),
-                        "unfold_a"
-                ))
-                .subAggregation(new TimeSeriesCoordinatorAggregationBuilder(
-                        "final",
-                        List.of(new UnionStage("unfold_b")),
-                        new LinkedHashMap<>(),
-                        Map.of("unfold_a", "unfold_a", "unfold_b", "copy_a"),
-                        "unfold_a"
-                ));
+        aggregationBuilderWithCache.subAggregation(
+            new TimeSeriesUnfoldAggregationBuilder("unfold_a", List.of(new ScaleStage(2.0)), MIN_TS, maxTs, STEP)
+        )
+            .subAggregation(
+                new TimeSeriesCoordinatorAggregationBuilder(
+                    "copy_a",
+                    List.of(new CopyStage()),
+                    new LinkedHashMap<>(),
+                    Map.of("unfold_a", "unfold_a"),
+                    "unfold_a"
+                )
+            )
+            .subAggregation(
+                new TimeSeriesCoordinatorAggregationBuilder(
+                    "final",
+                    List.of(new UnionStage("unfold_b")),
+                    new LinkedHashMap<>(),
+                    Map.of("unfold_a", "unfold_a", "unfold_b", "copy_a"),
+                    "unfold_a"
+                )
+            );
 
         baselineUnfold = new GlobalAggregationBuilder("baseline_unfold");
-        baselineUnfold
-                .subAggregation(new TimeSeriesUnfoldAggregationBuilder(
-                        "unfold_a",
-                        List.of(new ScaleStage(2.0)),
-                        MIN_TS,
-                        maxTs,
-                        STEP
-                ));
+        baselineUnfold.subAggregation(
+            new TimeSeriesUnfoldAggregationBuilder("unfold_a", List.of(new ScaleStage(2.0)), MIN_TS, maxTs, STEP)
+        );
         UnfoldWithCopy = new GlobalAggregationBuilder("unfold_copy");
-        UnfoldWithCopy
-                .subAggregation(new TimeSeriesUnfoldAggregationBuilder(
-                        "unfold_a",
-                        List.of(new ScaleStage(2.0)),
-                        MIN_TS,
-                        maxTs,
-                        STEP
-                ))
-                .subAggregation(new TimeSeriesCoordinatorAggregationBuilder(
-                        "copy_a",
-                        List.of(new CopyStage()),
-                        new LinkedHashMap<>(),
-                        Map.of("unfold_a", "unfold_a"),
-                        "unfold_a"
-                ));
+        UnfoldWithCopy.subAggregation(new TimeSeriesUnfoldAggregationBuilder("unfold_a", List.of(new ScaleStage(2.0)), MIN_TS, maxTs, STEP))
+            .subAggregation(
+                new TimeSeriesCoordinatorAggregationBuilder(
+                    "copy_a",
+                    List.of(new CopyStage()),
+                    new LinkedHashMap<>(),
+                    Map.of("unfold_a", "unfold_a"),
+                    "unfold_a"
+                )
+            );
     }
 
     @TearDown(Level.Trial)
@@ -141,21 +128,49 @@ public class CachingUnfoldAggregationBenchmark extends BaseTSDBBenchmark {
 
     @Benchmark
     public void benchmarkWithoutCaching(Blackhole blackhole) throws IOException {
-        blackhole.consume(searchAndReduce(indexSearcher, createSearchContext(indexSearcher, createIndexSettings(), query, createBucketConsumer()), rewritten, aggregationBuilderNoCache));
+        blackhole.consume(
+            searchAndReduce(
+                indexSearcher,
+                createSearchContext(indexSearcher, createIndexSettings(), query, createBucketConsumer()),
+                rewritten,
+                aggregationBuilderNoCache
+            )
+        );
     }
 
     @Benchmark
     public void benchmarkWithCaching(Blackhole blackhole) throws IOException {
-        blackhole.consume(searchAndReduce(indexSearcher, createSearchContext(indexSearcher, createIndexSettings(), query, createBucketConsumer()), rewritten, aggregationBuilderWithCache));
+        blackhole.consume(
+            searchAndReduce(
+                indexSearcher,
+                createSearchContext(indexSearcher, createIndexSettings(), query, createBucketConsumer()),
+                rewritten,
+                aggregationBuilderWithCache
+            )
+        );
     }
 
     @Benchmark
     public void benchmarkUnfoldBaseline(Blackhole blackhole) throws IOException {
-        blackhole.consume(searchAndReduce(indexSearcher, createSearchContext(indexSearcher, createIndexSettings(), query, createBucketConsumer()), rewritten, baselineUnfold));
+        blackhole.consume(
+            searchAndReduce(
+                indexSearcher,
+                createSearchContext(indexSearcher, createIndexSettings(), query, createBucketConsumer()),
+                rewritten,
+                baselineUnfold
+            )
+        );
     }
 
     @Benchmark
     public void benchmarkUnfoldAndCopy(Blackhole blackhole) throws IOException {
-        blackhole.consume(searchAndReduce(indexSearcher, createSearchContext(indexSearcher, createIndexSettings(), query, createBucketConsumer()), rewritten, UnfoldWithCopy));
+        blackhole.consume(
+            searchAndReduce(
+                indexSearcher,
+                createSearchContext(indexSearcher, createIndexSettings(), query, createBucketConsumer()),
+                rewritten,
+                UnfoldWithCopy
+            )
+        );
     }
 }
