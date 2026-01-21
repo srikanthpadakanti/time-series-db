@@ -27,13 +27,15 @@ import java.util.Map;
 /**
  * Pipeline stage that implements M3QL's sort function.
  *
- * These functions are used to sort time series by either avg, max, or sum of their values.
+ * These functions are used to sort time series by avg, current, max, min, name, stddev, or sum.
  * sort also takes an optional second argument, asc or desc respectively, which specifies
  * whether the data should be sorted in ascending or descending order.
  * If no direction is specified, the default is descending order.
  *
  * The sorting process:
- * 1. For each time series, calculate the sorting key based on max/avg/sum of all its values
+ * 1. For each time series, calculate the sorting key based on the selected function
+ *    - Numeric sorts (avg, current, max, min, sum, stddev): use calculated values
+ *    - String sorts (name): use the alias of the time series
  * 2. Sort the time series based on the sorting key, keeping each time series unchanged
  *
  * Usage: fetch a | sort avg desc
@@ -108,6 +110,7 @@ public class SortStage implements UnaryPipelineStage {
             case MIN -> Comparator.comparingDouble(this::calculateMin);
             case SUM -> Comparator.comparingDouble(this::calculateSum);
             case STDDEV -> Comparator.comparingDouble(this::calculateStddev);
+            case NAME -> Comparator.comparing(this::extractAlias);
         };
     }
 
@@ -226,6 +229,17 @@ public class SortStage implements UnaryPipelineStage {
             stddev = Math.sqrt(variance);
         }
         return stddev;
+    }
+
+    /**
+     * Extract the alias from the time series labels as the sorting key.
+     * null alias will be treated as empty string
+     *
+     * @param timeSeries The time series to extract the alias from
+     * @return The value of the alias
+     */
+    private String extractAlias(TimeSeries timeSeries) {
+        return timeSeries.getAlias() == null ? "" : timeSeries.getAlias();
     }
 
     @Override

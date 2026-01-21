@@ -245,6 +245,153 @@ public class SortStageTests extends AbstractWireSerializingTestCase<SortStage> {
         assertEquals("B", getLabel(result.get(2))); // highest variation
     }
 
+    public void testProcessSortByNameDesc() {
+        // Arrange
+        TimeSeries seriesA = createTimeSeriesWithAlias("alpha", Arrays.asList(1.0, 2.0));
+        TimeSeries seriesB = createTimeSeriesWithAlias("charlie", Arrays.asList(3.0, 4.0));
+        TimeSeries seriesC = createTimeSeriesWithAlias("bravo", Arrays.asList(5.0, 6.0));
+        List<TimeSeries> input = Arrays.asList(seriesA, seriesB, seriesC);
+
+        SortStage sortStage = new SortStage(SortByType.NAME, SortOrderType.DESC);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Verify sort order (charlie > bravo > alpha)
+        assertEquals(3, result.size());
+        assertEquals("charlie", getAlias(result.get(0))); // highest alphabetically
+        assertEquals("bravo", getAlias(result.get(1))); // middle alphabetically
+        assertEquals("alpha", getAlias(result.get(2))); // lowest alphabetically
+    }
+
+    public void testProcessSortByNameAsc() {
+        // Arrange
+        TimeSeries seriesA = createTimeSeriesWithAlias("zulu", Arrays.asList(1.0, 2.0));
+        TimeSeries seriesB = createTimeSeriesWithAlias("alpha", Arrays.asList(3.0, 4.0));
+        TimeSeries seriesC = createTimeSeriesWithAlias("mike", Arrays.asList(5.0, 6.0));
+        List<TimeSeries> input = Arrays.asList(seriesA, seriesB, seriesC);
+
+        SortStage sortStage = new SortStage(SortByType.NAME, SortOrderType.ASC);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Verify sort order (alpha < mike < zulu)
+        assertEquals(3, result.size());
+        assertEquals("alpha", getAlias(result.get(0))); // lowest alphabetically
+        assertEquals("mike", getAlias(result.get(1))); // middle alphabetically
+        assertEquals("zulu", getAlias(result.get(2))); // highest alphabetically
+    }
+
+    public void testProcessSortByNameWithMissingAlias() {
+        // Arrange: Time series without alias (treated as empty string) sorts first in ASC
+        TimeSeries seriesWithAlias = createTimeSeriesWithAlias("zebra", Arrays.asList(1.0, 2.0));
+        TimeSeries seriesWithoutAlias = createTimeSeriesWithoutAlias(Arrays.asList(3.0, 4.0)); // No alias (null -> "")
+        List<TimeSeries> input = Arrays.asList(seriesWithAlias, seriesWithoutAlias);
+
+        SortStage sortStage = new SortStage(SortByType.NAME, SortOrderType.ASC);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Series without alias (empty string) comes first in ASC order
+        assertEquals(2, result.size());
+        assertNull(getAlias(result.get(0))); // No alias (null -> empty string sorts first)
+        assertEquals("zebra", getAlias(result.get(1))); // Has alias
+    }
+
+    public void testProcessSortByNameWithNulls() {
+        // Arrange: Null aliases are treated as empty strings in sorting
+        TimeSeries seriesA = createTimeSeriesWithAlias("alpha", Arrays.asList(1.0, 2.0));
+        TimeSeries seriesB = createTimeSeriesWithAlias("charlie", Arrays.asList(3.0, 4.0));
+        TimeSeries seriesWithoutAlias = createTimeSeriesWithoutAlias(Arrays.asList(5.0, 6.0)); // No alias (null -> "")
+        List<TimeSeries> input = Arrays.asList(seriesA, seriesWithoutAlias, seriesB);
+
+        SortStage sortStage = new SortStage(SortByType.NAME, SortOrderType.DESC);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: DESC order - charlie, alpha, "" (null)
+        assertEquals(3, result.size());
+        assertEquals("charlie", getAlias(result.get(0))); // Highest alphabetically
+        assertEquals("alpha", getAlias(result.get(1))); // Lowest alphabetically
+        assertNull(getAlias(result.get(2))); // No alias (empty string sorts last in DESC)
+
+        sortStage = new SortStage(SortByType.NAME, SortOrderType.ASC);
+
+        // Act
+        result = sortStage.process(input);
+
+        // Assert: ASC order - "" (null), alpha, charlie
+        assertEquals(3, result.size());
+        assertNull(getAlias(result.get(0))); // No alias (empty string sorts first in ASC)
+        assertEquals("alpha", getAlias(result.get(1))); // Lowest alphabetically
+        assertEquals("charlie", getAlias(result.get(2))); // Highest alphabetically
+    }
+
+    public void testProcessSortByNameWithBothNulls() {
+        // Arrange: Test when both time series have null aliases (both treated as empty strings)
+        TimeSeries series1 = createTimeSeriesWithoutAlias(Arrays.asList(1.0, 2.0)); // No alias (null -> "")
+        TimeSeries series2 = createTimeSeriesWithoutAlias(Arrays.asList(3.0, 4.0)); // No alias (null -> "")
+        List<TimeSeries> input = Arrays.asList(series1, series2);
+
+        SortStage sortStage = new SortStage(SortByType.NAME, SortOrderType.ASC);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: When both are null (empty strings), they should be equal - stable sort preserves order
+        assertEquals(2, result.size());
+        // Both have null aliases (empty strings), so order should be stable (same as input)
+        assertTrue(result.contains(series1));
+        assertTrue(result.contains(series2));
+        assertNull(getAlias(result.get(0)));
+        assertEquals(1.0, result.get(0).getSamples().get(0).getValue(), 0.0);
+        assertNull(getAlias(result.get(1)));
+        assertEquals(3.0, result.get(1).getSamples().get(0).getValue(), 0.0);
+    }
+
+    public void testProcessSortByNameWithEmptyAlias() {
+        // Arrange: Test when alias is empty string (sorts first in ASC, last in DESC)
+        TimeSeries seriesWithEmptyAlias = createTimeSeriesWithAlias("", Arrays.asList(1.0, 2.0));
+        TimeSeries seriesWithAlias = createTimeSeriesWithAlias("alpha", Arrays.asList(3.0, 4.0));
+        List<TimeSeries> input = Arrays.asList(seriesWithAlias, seriesWithEmptyAlias);
+
+        SortStage sortStage = new SortStage(SortByType.NAME, SortOrderType.ASC);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Empty string alias sorts before other strings in ASC
+        assertEquals(2, result.size());
+        assertEquals("", getAlias(result.get(0))); // Empty alias comes first in ASC
+        assertEquals("alpha", getAlias(result.get(1))); // Non-empty alias comes after
+    }
+
+    public void testProcessSortByNameWithMixedAliasesDescending() {
+        // Arrange: Test mixed aliases in descending order (null treated as empty string)
+        TimeSeries series1 = createTimeSeriesWithAlias("delta", Arrays.asList(1.0));
+        TimeSeries series2 = createTimeSeriesWithoutAlias(Arrays.asList(2.0)); // null alias -> ""
+        TimeSeries series3 = createTimeSeriesWithAlias("beta", Arrays.asList(3.0));
+        TimeSeries series4 = createTimeSeriesWithAlias("", Arrays.asList(4.0)); // empty alias
+        List<TimeSeries> input = Arrays.asList(series1, series2, series3, series4);
+
+        SortStage sortStage = new SortStage(SortByType.NAME, SortOrderType.DESC);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: DESC order - delta > beta > "" (empty, both null and empty string)
+        assertEquals(4, result.size());
+        assertEquals("delta", getAlias(result.get(0))); // Highest
+        assertEquals("beta", getAlias(result.get(1))); // Middle
+        // Both series2 and series4 have empty string aliases, order between them is stable
+        String alias2 = getAlias(result.get(2));
+        String alias3 = getAlias(result.get(3));
+        assertTrue((alias2 == null || alias2.equals("")) && (alias3 == null || alias3.equals("")));
+    }
+
     public void testProcessWithSingleTimeSeries() {
         // Arrange
         SortStage sortStage = new SortStage(SortByType.AVG);
@@ -270,6 +417,90 @@ public class SortStageTests extends AbstractWireSerializingTestCase<SortStage> {
         // Assert: Should return the series as-is
         assertEquals(1, result.size());
         assertEquals("empty", getLabel(result.get(0)));
+    }
+
+    public void testProcessSortByAvgComparingEmptyAndNonEmpty() {
+        // Test AVG comparing empty vs non-empty time series - triggers calculation with empty samples
+        SortStage sortStage = new SortStage(SortByType.AVG);
+        TimeSeries emptyTimeSeries = createLabeledTimeSeries("empty", new ArrayList<>());
+        TimeSeries nonEmptyTimeSeries = createLabeledTimeSeries("nonempty", Arrays.asList(5.0));
+        List<TimeSeries> input = Arrays.asList(emptyTimeSeries, nonEmptyTimeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors
+        assertEquals(2, result.size());
+    }
+
+    public void testProcessSortByCurrentComparingEmptyAndNonEmpty() {
+        // Test CURRENT comparing empty vs non-empty - should return 0.0 for empty
+        SortStage sortStage = new SortStage(SortByType.CURRENT);
+        TimeSeries emptyTimeSeries = createLabeledTimeSeries("empty", new ArrayList<>());
+        TimeSeries nonEmptyTimeSeries = createLabeledTimeSeries("nonempty", Arrays.asList(5.0));
+        List<TimeSeries> input = Arrays.asList(emptyTimeSeries, nonEmptyTimeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors
+        assertEquals(2, result.size());
+    }
+
+    public void testProcessSortByMaxComparingEmptyAndNonEmpty() {
+        // Test MAX comparing empty vs non-empty - should return 0.0 for empty
+        SortStage sortStage = new SortStage(SortByType.MAX);
+        TimeSeries emptyTimeSeries = createLabeledTimeSeries("empty", new ArrayList<>());
+        TimeSeries nonEmptyTimeSeries = createLabeledTimeSeries("nonempty", Arrays.asList(5.0));
+        List<TimeSeries> input = Arrays.asList(emptyTimeSeries, nonEmptyTimeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors
+        assertEquals(2, result.size());
+    }
+
+    public void testProcessSortByMinComparingEmptyAndNonEmpty() {
+        // Test MIN comparing empty vs non-empty - should return 0.0 for empty
+        SortStage sortStage = new SortStage(SortByType.MIN);
+        TimeSeries emptyTimeSeries = createLabeledTimeSeries("empty", new ArrayList<>());
+        TimeSeries nonEmptyTimeSeries = createLabeledTimeSeries("nonempty", Arrays.asList(5.0));
+        List<TimeSeries> input = Arrays.asList(emptyTimeSeries, nonEmptyTimeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors
+        assertEquals(2, result.size());
+    }
+
+    public void testProcessSortBySumComparingEmptyAndNonEmpty() {
+        // Test SUM comparing empty vs non-empty - should return 0.0 for empty
+        SortStage sortStage = new SortStage(SortByType.SUM);
+        TimeSeries emptyTimeSeries = createLabeledTimeSeries("empty", new ArrayList<>());
+        TimeSeries nonEmptyTimeSeries = createLabeledTimeSeries("nonempty", Arrays.asList(5.0));
+        List<TimeSeries> input = Arrays.asList(emptyTimeSeries, nonEmptyTimeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors
+        assertEquals(2, result.size());
+    }
+
+    public void testProcessSortByStddevComparingEmptyAndNonEmpty() {
+        // Test STDDEV comparing empty vs non-empty - should return 0.0 for empty
+        SortStage sortStage = new SortStage(SortByType.STDDEV);
+        TimeSeries emptyTimeSeries = createLabeledTimeSeries("empty", new ArrayList<>());
+        TimeSeries nonEmptyTimeSeries = createLabeledTimeSeries("nonempty", Arrays.asList(5.0, 10.0));
+        List<TimeSeries> input = Arrays.asList(emptyTimeSeries, nonEmptyTimeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors
+        assertEquals(2, result.size());
     }
 
     public void testProcessWithNaNValues() {
@@ -313,12 +544,13 @@ public class SortStageTests extends AbstractWireSerializingTestCase<SortStage> {
         assertEquals(SortByType.MIN, SortByType.fromString("min"));
         assertEquals(SortByType.SUM, SortByType.fromString("sum"));
         assertEquals(SortByType.STDDEV, SortByType.fromString("stddev"));
+        assertEquals(SortByType.NAME, SortByType.fromString("name"));
     }
 
     public void testSortByFromStringInvalid() {
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> SortByType.fromString("invalid"));
         assertTrue(exception.getMessage().contains("Invalid sortby type"));
-        assertTrue(exception.getMessage().contains("avg, current, max, min, stddev, sum"));
+        assertTrue(exception.getMessage().contains("avg, current, max, min, name, stddev, sum"));
     }
 
     public void testSortByGetValue() {
@@ -328,6 +560,7 @@ public class SortStageTests extends AbstractWireSerializingTestCase<SortStage> {
         assertEquals("min", SortByType.MIN.getValue());
         assertEquals("sum", SortByType.SUM.getValue());
         assertEquals("stddev", SortByType.STDDEV.getValue());
+        assertEquals("name", SortByType.NAME.getValue());
     }
 
     // ========== SortOrder Enum Tests ==========
@@ -617,6 +850,103 @@ public class SortStageTests extends AbstractWireSerializingTestCase<SortStage> {
         assertEquals("identical", getLabel(result.get(1)));
     }
 
+    public void testProcessSortByAvgWithAllNaNAndNullSamples() {
+        // Test AVG with all NaN/null values - should handle count=0 case
+        SortStage sortStage = new SortStage(SortByType.AVG);
+        List<Sample> samples = Arrays.asList(new FloatSample(1000L, Double.NaN), null, new FloatSample(3000L, Double.NaN));
+        Labels labels = ByteLabels.fromMap(Map.of("label", "allnanandnull"));
+        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 3000L, 1000L, "allnanandnull");
+        List<TimeSeries> input = Arrays.asList(timeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors and return 0.0 for count=0
+        assertEquals(1, result.size());
+        assertEquals("allnanandnull", getLabel(result.get(0)));
+    }
+
+    public void testProcessSortByMaxWithAllNaNAndNullSamples() {
+        // Test MAX when all samples are NaN/null - should return 0.0
+        SortStage sortStage = new SortStage(SortByType.MAX);
+        List<Sample> samples = Arrays.asList(new FloatSample(1000L, Double.NaN), null);
+        Labels labels = ByteLabels.fromMap(Map.of("label", "maxnanonly"));
+        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 2000L, 1000L, "maxnanonly");
+        List<TimeSeries> input = Arrays.asList(timeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors
+        assertEquals(1, result.size());
+        assertEquals("maxnanonly", getLabel(result.get(0)));
+    }
+
+    public void testProcessSortByMinWithAllNaNAndNullSamples() {
+        // Test MIN when all samples are NaN/null - should return 0.0
+        SortStage sortStage = new SortStage(SortByType.MIN);
+        List<Sample> samples = Arrays.asList(new FloatSample(1000L, Double.NaN), null);
+        Labels labels = ByteLabels.fromMap(Map.of("label", "minnanonly"));
+        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 2000L, 1000L, "minnanonly");
+        List<TimeSeries> input = Arrays.asList(timeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors
+        assertEquals(1, result.size());
+        assertEquals("minnanonly", getLabel(result.get(0)));
+    }
+
+    public void testProcessSortBySumWithAllNaNAndNullSamples() {
+        // Test SUM with all NaN/null values
+        SortStage sortStage = new SortStage(SortByType.SUM);
+        List<Sample> samples = Arrays.asList(new FloatSample(1000L, Double.NaN), null);
+        Labels labels = ByteLabels.fromMap(Map.of("label", "sumnanonly"));
+        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 2000L, 1000L, "sumnanonly");
+        List<TimeSeries> input = Arrays.asList(timeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors
+        assertEquals(1, result.size());
+        assertEquals("sumnanonly", getLabel(result.get(0)));
+    }
+
+    public void testProcessSortByStddevWithAllNaNAndNullSamples() {
+        // Test STDDEV with all NaN/null values
+        SortStage sortStage = new SortStage(SortByType.STDDEV);
+        List<Sample> samples = Arrays.asList(new FloatSample(1000L, Double.NaN), null, new FloatSample(3000L, Double.NaN));
+        Labels labels = ByteLabels.fromMap(Map.of("label", "stddevnanonly"));
+        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 3000L, 1000L, "stddevnanonly");
+        List<TimeSeries> input = Arrays.asList(timeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors
+        assertEquals(1, result.size());
+        assertEquals("stddevnanonly", getLabel(result.get(0)));
+    }
+
+    public void testProcessSortByCurrentWithAllNaNAndNullSamples() {
+        // Test CURRENT when all samples are NaN/null - should return 0.0
+        // Need 2 series to trigger comparison
+        SortStage sortStage = new SortStage(SortByType.CURRENT);
+        List<Sample> samples = Arrays.asList(new FloatSample(1000L, Double.NaN), null, new FloatSample(3000L, Double.NaN));
+        Labels labels = ByteLabels.fromMap(Map.of("label", "currentnanonly"));
+        TimeSeries timeSeriesNanOnly = new TimeSeries(samples, labels, 1000L, 3000L, 1000L, "currentnanonly");
+        TimeSeries normalTimeSeries = createLabeledTimeSeries("normal", Arrays.asList(5.0));
+        List<TimeSeries> input = Arrays.asList(timeSeriesNanOnly, normalTimeSeries);
+
+        // Act
+        List<TimeSeries> result = sortStage.process(input);
+
+        // Assert: Should process without errors
+        assertEquals(2, result.size());
+    }
+
     // ========== Helper Methods ==========
 
     /**
@@ -661,6 +991,41 @@ public class SortStageTests extends AbstractWireSerializingTestCase<SortStage> {
      */
     private String getLabel(TimeSeries timeSeries) {
         return timeSeries.getLabels().get("label");
+    }
+
+    /**
+     * Creates a time series with an alias for testing NAME sorting.
+     * The alias is set as the TimeSeries alias field (extractAlias uses getAlias() directly).
+     */
+    private TimeSeries createTimeSeriesWithAlias(String alias, List<Double> values) {
+        List<Sample> samples = new ArrayList<>();
+        for (int i = 0; i < values.size(); i++) {
+            samples.add(new FloatSample(1000L + i * 1000L, values.get(i)));
+        }
+        Labels labels = ByteLabels.emptyLabels();
+        long endTime = values.isEmpty() ? 1000L : 1000L + (values.size() - 1) * 1000L;
+        return new TimeSeries(samples, labels, 1000L, endTime, 1000L, alias);
+    }
+
+    /**
+     * Extracts the "name" tag from a time series for verification purposes.
+     */
+    private String getNameLabel(TimeSeries timeSeries) {
+        return timeSeries.getLabels().get("name");
+    }
+
+    /**
+     * Extracts the alias from a time series for verification purposes.
+     */
+    private String getAlias(TimeSeries timeSeries) {
+        return timeSeries.getAlias();
+    }
+
+    /**
+     * Creates a time series without an alias (null) for testing NAME sorting with nulls.
+     */
+    private TimeSeries createTimeSeriesWithoutAlias(List<Double> values) {
+        return createTimeSeriesWithAlias(null, values);
     }
 
     /**

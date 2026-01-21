@@ -19,7 +19,7 @@ import java.util.Locale;
 /**
  * SortPlanNode represents a plan node that handles sort operations in M3QL.
  *
- * The sort function sorts time series by either avg, max, or sum of their values.
+ * The sort function sorts time series by avg, current, max, min, name, stddev, or sum.
  * It takes an optional second argument for sort order (asc or desc, defaulting to desc).
  *
  * This is a global aggregation that can only be executed at the coordinator aggregator,
@@ -33,7 +33,7 @@ public class SortPlanNode extends M3PlanNode {
      * Constructor for SortPlanNode.
      *
      * @param id        The node ID
-     * @param sortBy    The sorting function (avg, max, sum)
+     * @param sortBy    The sorting function (avg, current, max, min, name, stddev, sum)
      * @param sortOrder The sorting order (asc, desc)
      */
     public SortPlanNode(int id, SortByType sortBy, SortOrderType sortOrder) {
@@ -55,7 +55,7 @@ public class SortPlanNode extends M3PlanNode {
     /**
      * Returns the sorting function.
      *
-     * @return The sorting function (avg, max, sum)
+     * @return The sorting function (avg, current, max, min, name, stddev, sum)
      */
     public SortByType getSortBy() {
         return sortBy;
@@ -108,7 +108,7 @@ public class SortPlanNode extends M3PlanNode {
 
         // First argument: sort function
         if (!(functionNode.getChildren().getFirst() instanceof ValueNode valueNode)) {
-            throw new IllegalArgumentException("Sort function argument must be a value (avg, current, max, min, sum, stddev)");
+            throw new IllegalArgumentException("Sort function argument must be a value (avg, current, max, min, name, stddev, sum)");
         }
         return SortByType.fromString(valueNode.getValue());
     }

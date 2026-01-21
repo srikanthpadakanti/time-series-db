@@ -68,12 +68,13 @@ public class SortPlanNodeTests extends BasePlanNodeTests {
     }
 
     public void testSortPlanNodeFactoryMethodWithAllValidSortFunctions() {
-        String[] validSortFunctions = { "avg", "current", "max", "min", "stddev", "sum" };
+        String[] validSortFunctions = { "avg", "current", "max", "min", "name", "stddev", "sum" };
         SortByType[] expectedSortByTypes = {
             SortByType.AVG,
             SortByType.CURRENT,
             SortByType.MAX,
             SortByType.MIN,
+            SortByType.NAME,
             SortByType.STDDEV,
             SortByType.SUM };
 
@@ -102,6 +103,27 @@ public class SortPlanNodeTests extends BasePlanNodeTests {
             assertEquals(SortByType.AVG, node.getSortBy());
             assertEquals(expectedOrderTypes[i], node.getSortOrder());
         }
+    }
+
+    public void testSortPlanNodeFactoryMethodWithNameSortFunction() {
+        // Test name sort with default desc order
+        FunctionNode functionNode1 = new FunctionNode();
+        functionNode1.setFunctionName("sort");
+        functionNode1.addChildNode(new ValueNode("name"));
+
+        SortPlanNode node1 = SortPlanNode.of(functionNode1);
+        assertEquals(SortByType.NAME, node1.getSortBy());
+        assertEquals(SortOrderType.DESC, node1.getSortOrder());
+
+        // Test name sort with explicit asc order
+        FunctionNode functionNode2 = new FunctionNode();
+        functionNode2.setFunctionName("sort");
+        functionNode2.addChildNode(new ValueNode("name"));
+        functionNode2.addChildNode(new ValueNode("asc"));
+
+        SortPlanNode node2 = SortPlanNode.of(functionNode2);
+        assertEquals(SortByType.NAME, node2.getSortBy());
+        assertEquals(SortOrderType.ASC, node2.getSortOrder());
     }
 
     public void testSortPlanNodeFactoryMethodWithNoArgumentsDefaultsToCurrent() {
@@ -217,7 +239,7 @@ public class SortPlanNodeTests extends BasePlanNodeTests {
 
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> SortPlanNode.of(functionNode));
         assertTrue(exception.getMessage().contains("Invalid sortby type"));
-        assertTrue(exception.getMessage().contains("avg, current, max, min, stddev, sum"));
+        assertTrue(exception.getMessage().contains("avg, current, max, min, name, stddev, sum"));
     }
 
     public void testInvalidSortOrderErrorMessage() {

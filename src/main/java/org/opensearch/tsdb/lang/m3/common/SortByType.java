@@ -35,7 +35,12 @@ public enum SortByType {
     /**
      * Standard Deviation sortBy type.
      */
-    STDDEV("stddev");
+    STDDEV("stddev"),
+
+    /**
+     * Name sortBy type.
+     */
+    NAME("name");
 
     private final String value;
 
@@ -71,9 +76,11 @@ public enum SortByType {
                 return SUM;
             case Constants.Functions.Sort.STD_DEV:
                 return STDDEV;
+            case Constants.Functions.Sort.NAME:
+                return NAME;
             default:
                 throw new IllegalArgumentException(
-                    "Invalid sortby type: " + sortByType + ", Supported: avg, current, max, min, stddev, sum"
+                    "Invalid sortby type: " + sortByType + ", Supported: avg, current, max, min, name, stddev, sum"
                 );
         }
     }
